@@ -171,6 +171,19 @@ func _scrollBytesB(b, rowBytes, totalBytes) {   // shift everything up one row (
     while i < totalBytes { bufSetByte(b, i - rowBytes, toInt(bufGetByte(b, i)))  i = i + 1 }
     emit 0
 }
+// scroll one byte-plane within rows [top..bot] up by one (DECSTBM region); blank
+// row bot. rowBytes = bytes per cell-row (cols*5 for grid, cols for attr planes).
+func _scrollRegionBytesB(b, top, bot, rowBytes, fillIsBlank, cols) {
+    let r = top
+    while r < bot {
+        let dst = r * rowBytes
+        let src = dst + rowBytes
+        let j = 0
+        while j < rowBytes { bufSetByte(b, dst + j, toInt(bufGetByte(b, src + j)))  j = j + 1 }
+        r = r + 1
+    }
+    emit 0
+}
 func _renderRowB(gb, ab, bb, base, cols) {       // one cell-row -> text, from buffers (for scrolled)
     let e = cols
     let trimming = 1
@@ -384,6 +397,8 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
     let pasteMode = _cf(tail, 15)        // bracketed paste enabled (DECSET 2004)
     let focusMode = _cf(tail, 16)        // focus reporting enabled (DECSET 1004)
     let g0gfx = _cf(tail, 17)            // G0 = DEC special graphics (ESC ( 0) for line-drawing
+    let scrollTop = _cf(tail, 18)        // DECSTBM scroll region top (0-based)
+    let scrollBot = _cf(tail, 19)        // DECSTBM scroll region bottom; (0,0) = full screen
     let scrolled = ""                    // rows scrolled off THIS feed (reset each call)
     let bell = 0                         // bare BEL (0x07) seen THIS feed (reset each call)
     let n = len(s)
@@ -427,6 +442,19 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                             if ps == 3 || ps == 4 { cshape = 3 }       // underline
                             if ps == 5 || ps == 6 { cshape = 1 }       // bar
                         }
+                        if fin == 114 {                  // 'r' DECSTBM — set scroll region (top;bottom)
+                            if len(params) == 0 { scrollTop = 0  scrollBot = 0 }   // reset to full screen
+                            else {
+                                let rt = _leadInt(params, 1) - 1
+                                let rb = _leadInt(_afterSemi(params), rows) - 1
+                                if rt < 0 { rt = 0 }   if rb > rows - 1 { rb = rows - 1 }
+                                if rt < rb {
+                                    scrollTop = rt   scrollBot = rb
+                                    if rt == 0 && rb == rows - 1 { scrollBot = 0 }   // normalize full -> sentinel
+                                }
+                            }
+                            cr = 0  cc = 0  pw = 0       // DECSTBM homes the cursor
+                        }
                         if fin == 74 {                   // 'J' erase in display (honour param)
                             let pj = _leadInt(params, 0)
                             let ja = 0
@@ -468,6 +496,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                                             savedAltCr = cr  savedAltCc = cc
                                             _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)  _fillB(ub, 0, total, 0)
                                             cr = 0  cc = 0  pw = 0
+                                            scrollTop = 0  scrollBot = 0   // alt screen starts full-region
                                             altActive = 1
                                         }
                                     } else {
@@ -477,6 +506,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                                             _loadBuf(bb, savedGrids, g5 + total, total)
                                             _fillB(ub, 0, total, 0)   // underline not saved across alt screen
                                             cr = savedAltCr  cc = savedAltCc  pw = 0
+                                            scrollTop = 0  scrollBot = 0   // region reset on leaving alt
                                             savedGrids = ""
                                             altActive = 0
                                         }
@@ -514,7 +544,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                             if k == 56 { cr = scr  cc = scc  pen = spen }    // ESC 8 restore cursor
                             if k == 99 {                                     // ESC c = RIS full reset
                                 _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)  _fillB(ub, 0, total, 0)
-                                cr = 0  cc = 0  pen = 257  pw = 0  g0gfx = 0  altActive = 0
+                                cr = 0  cc = 0  pen = 257  pw = 0  g0gfx = 0  altActive = 0  scrollTop = 0  scrollBot = 0
                             }
                             i = i + 2                        // ESC x (2-byte)
                         }
@@ -523,15 +553,17 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
             }
         } else {
             if c == 10 {                                                         // LF → newline
-                cr = cr + 1  cc = 0  pw = 0
-                if cr >= rows {
-                    if altActive == 0 { scrolled = scrolled + _renderRowB(gb, ab, bb, 0, cols) + fromCharCode(10) }
-                    _scrollBytesB(gb, stride, gtotal)  _blankCellsB(gb, (rows - 1) * cols, cols)
-                    _scrollBytesB(ab, cols, total)  _fillB(ab, (rows - 1) * cols, cols, 1)
-                    _scrollBytesB(bb, cols, total)  _fillB(bb, (rows - 1) * cols, cols, 1)
-                    _scrollBytesB(ub, cols, total)  _fillB(ub, (rows - 1) * cols, cols, 0)
-                    cr = rows - 1
-                }
+                cc = 0  pw = 0
+                let eBot = scrollBot  if scrollTop == 0 && scrollBot == 0 { eBot = rows - 1 }
+                if cr == eBot {                                                  // at bottom margin -> scroll region up
+                    if scrollTop == 0 && eBot == rows - 1 && altActive == 0 {    // full screen -> feed scrollback
+                        scrolled = scrolled + _renderRowB(gb, ab, bb, 0, cols) + fromCharCode(10)
+                    }
+                    _scrollRegionBytesB(gb, scrollTop, eBot, stride, 1, cols)  _blankCellsB(gb, eBot * cols, cols)
+                    _scrollRegionBytesB(ab, scrollTop, eBot, cols, 1, cols)  _fillB(ab, eBot * cols, cols, 1)
+                    _scrollRegionBytesB(bb, scrollTop, eBot, cols, 1, cols)  _fillB(bb, eBot * cols, cols, 1)
+                    _scrollRegionBytesB(ub, scrollTop, eBot, cols, 1, cols)  _fillB(ub, eBot * cols, cols, 0)
+                } else { if cr < rows - 1 { cr = cr + 1 } }
                 i = i + 1
             }
             else {
@@ -548,15 +580,17 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                                 let clen = _utf8Len(c)
                                 if i + clen > n { clen = n - i }
                                 if pw == 1 {                                     // deferred wrap from last col
-                                    cc = 0  cr = cr + 1  pw = 0
-                                    if cr >= rows {
-                                        if altActive == 0 { scrolled = scrolled + _renderRowB(gb, ab, bb, 0, cols) + fromCharCode(10) }
-                                        _scrollBytesB(gb, stride, gtotal)  _blankCellsB(gb, (rows - 1) * cols, cols)
-                                        _scrollBytesB(ab, cols, total)  _fillB(ab, (rows - 1) * cols, cols, 1)
-                                        _scrollBytesB(bb, cols, total)  _fillB(bb, (rows - 1) * cols, cols, 1)
-                    _scrollBytesB(ub, cols, total)  _fillB(ub, (rows - 1) * cols, cols, 0)
-                                        cr = rows - 1
-                                    }
+                                    cc = 0  pw = 0
+                                    let eB2 = scrollBot  if scrollTop == 0 && scrollBot == 0 { eB2 = rows - 1 }
+                                    if cr == eB2 {
+                                        if scrollTop == 0 && eB2 == rows - 1 && altActive == 0 {
+                                            scrolled = scrolled + _renderRowB(gb, ab, bb, 0, cols) + fromCharCode(10)
+                                        }
+                                        _scrollRegionBytesB(gb, scrollTop, eB2, stride, 1, cols)  _blankCellsB(gb, eB2 * cols, cols)
+                                        _scrollRegionBytesB(ab, scrollTop, eB2, cols, 1, cols)  _fillB(ab, eB2 * cols, cols, 1)
+                                        _scrollRegionBytesB(bb, scrollTop, eB2, cols, 1, cols)  _fillB(bb, eB2 * cols, cols, 1)
+                                        _scrollRegionBytesB(ub, scrollTop, eB2, cols, 1, cols)  _fillB(ub, eB2 * cols, cols, 0)
+                                    } else { if cr < rows - 1 { cr = cr + 1 } }
                                 }
                                 let idx = cr * cols + cc
                                 let pul = pen / 131072           // underline flag (pen bit 17)
@@ -587,7 +621,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
         }
     }
 
-    emit cr + "," + cc + "," + pen + "," + scr + "," + scc + "," + spen + "," + pw + "," + bell + "," + mlevel + "," + msgr + "," + altActive + "," + savedAltCr + "," + savedAltCc + "," + cvis + "," + cshape + "," + pasteMode + "," + focusMode + "," + g0gfx + fromCharCode(1) + scrolled + fromCharCode(1) + savedGrids
+    emit cr + "," + cc + "," + pen + "," + scr + "," + scc + "," + spen + "," + pw + "," + bell + "," + mlevel + "," + msgr + "," + altActive + "," + savedAltCr + "," + savedAltCc + "," + cvis + "," + cshape + "," + pasteMode + "," + focusMode + "," + g0gfx + "," + scrollTop + "," + scrollBot + fromCharCode(1) + scrolled + fromCharCode(1) + savedGrids
 }
 
 // _renderRow(grid, attr, battr, base, cols) — one cell-row (base = row*cols)
