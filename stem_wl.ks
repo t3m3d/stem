@@ -294,6 +294,10 @@ func termReplies(s, meta, cols, rows) {
                 if params == "" || params == "0" { reply = reply + e + "[?1;2c" }       // DA1
                 else { if substring(params, 0, 1) == ">" { reply = reply + e + "[>1;10;0c" } }  // DA2
             }
+            if fin == 116 {                                        // 't' window manipulation
+                if params == "18" { reply = reply + e + "[8;" + rows + ";" + cols + "t" }       // text-area size (chars)
+                if params == "14" { reply = reply + e + "[4;" + (rows * 16) + ";" + (cols * 8) + "t" }  // size (px)
+            }
             i = j
         } else { i = i + 1 }
     }

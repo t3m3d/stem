@@ -448,6 +448,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
     let scrollTop = _cf(tail, 18)        // DECSTBM scroll region top (0-based)
     let scrollBot = _cf(tail, 19)        // DECSTBM scroll region bottom; (0,0) = full screen
     let nowrap = _cf(tail, 20)           // DECAWM off (1) — last column overwrites instead of wrapping
+    let decom = _cf(tail, 21)            // DECOM origin mode — CUP relative to the scroll region
     let scrolled = ""                    // rows scrolled off THIS feed (reset each call)
     let bell = 0                         // bare BEL (0x07) seen THIS feed (reset each call)
     let n = len(s)
@@ -470,7 +471,10 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                         let p0 = _leadInt(params, 1)
                         if fin >= 65 && fin <= 72 { pw = 0 }    // any cursor move/CUP clears pending wrap
                         if fin == 72 || fin == 102 {     // 'H'/'f' CUP row;col (1-based)
-                            cr = _clamp(p0 - 1, 0, rows - 1)
+                            if decom == 1 {              // origin mode: row relative to region top
+                                let oBot = scrollBot  if scrollTop == 0 && scrollBot == 0 { oBot = rows - 1 }
+                                cr = _clamp(scrollTop + p0 - 1, scrollTop, oBot)
+                            } else { cr = _clamp(p0 - 1, 0, rows - 1) }
                             cc = _clamp(_leadInt(_afterSemi(params), 1) - 1, 0, cols - 1)
                         }
                         if fin == 65 { cr = _clamp(cr - p0, 0, rows - 1) }   // up
@@ -578,6 +582,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                                 if mode == 2004 { pasteMode = on }                                 // bracketed paste
                                 if mode == 1004 { focusMode = on }                                 // focus reporting
                                 if mode == 7 { if on == 1 { nowrap = 0 } else { nowrap = 1 } }      // DECAWM autowrap
+                                if mode == 6 { decom = on  cc = 0  if on == 1 { cr = scrollTop } else { cr = 0 } }  // DECOM origin
                                 if mode == 1049 || mode == 1047 || mode == 47 {                    // alt screen
                                     if on == 1 {
                                         if altActive == 0 {
@@ -642,7 +647,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                             }
                             if k == 99 {                                     // ESC c = RIS full reset
                                 _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)  _fillB(ub, 0, total, 0)
-                                cr = 0  cc = 0  pen = 257  pw = 0  g0gfx = 0  altActive = 0  scrollTop = 0  scrollBot = 0  nowrap = 0
+                                cr = 0  cc = 0  pen = 257  pw = 0  g0gfx = 0  altActive = 0  scrollTop = 0  scrollBot = 0  nowrap = 0  decom = 0
                             }
                             i = i + 2                        // ESC x (2-byte)
                         }
@@ -719,7 +724,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
         }
     }
 
-    emit cr + "," + cc + "," + pen + "," + scr + "," + scc + "," + spen + "," + pw + "," + bell + "," + mlevel + "," + msgr + "," + altActive + "," + savedAltCr + "," + savedAltCc + "," + cvis + "," + cshape + "," + pasteMode + "," + focusMode + "," + g0gfx + "," + scrollTop + "," + scrollBot + "," + nowrap + fromCharCode(1) + scrolled + fromCharCode(1) + savedGrids
+    emit cr + "," + cc + "," + pen + "," + scr + "," + scc + "," + spen + "," + pw + "," + bell + "," + mlevel + "," + msgr + "," + altActive + "," + savedAltCr + "," + savedAltCc + "," + cvis + "," + cshape + "," + pasteMode + "," + focusMode + "," + g0gfx + "," + scrollTop + "," + scrollBot + "," + nowrap + "," + decom + fromCharCode(1) + scrolled + fromCharCode(1) + savedGrids
 }
 
 // _renderRow(grid, attr, battr, base, cols) — one cell-row (base = row*cols)
