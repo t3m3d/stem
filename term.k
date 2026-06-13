@@ -184,6 +184,24 @@ func _scrollRegionBytesB(b, top, bot, rowBytes, fillIsBlank, cols) {
     }
     emit 0
 }
+// scroll rows [top..bot] DOWN one (for RI / IL); caller blanks row top.
+func _scrollRegionDownB(b, top, bot, rowBytes) {
+    let r = bot
+    while r > top {
+        let dst = r * rowBytes
+        let src = dst - rowBytes
+        let j = 0
+        while j < rowBytes { bufSetByte(b, dst + j, toInt(bufGetByte(b, src + j)))  j = j + 1 }
+        r = r - 1
+    }
+    emit 0
+}
+// blank one cell-row (all 4 planes) at row r — shared by region down/up edges.
+func _blankFullRowB(gb, ab, bb, ub, r, cols) {
+    _blankCellsB(gb, r * cols, cols)  _fillB(ab, r * cols, cols, 1)
+    _fillB(bb, r * cols, cols, 1)  _fillB(ub, r * cols, cols, 0)
+    emit 0
+}
 func _renderRowB(gb, ab, bb, base, cols) {       // one cell-row -> text, from buffers (for scrolled)
     let e = cols
     let trimming = 1
@@ -455,6 +473,37 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                             }
                             cr = 0  cc = 0  pw = 0       // DECSTBM homes the cursor
                         }
+                        if fin == 76 {                   // 'L' IL — insert p0 blank lines at cursor
+                            let ilBot = scrollBot  if scrollTop == 0 && scrollBot == 0 { ilBot = rows - 1 }
+                            if cr >= scrollTop && cr <= ilBot {
+                                let kk = 0
+                                while kk < p0 && cr + kk <= ilBot {
+                                    _scrollRegionDownB(gb, cr, ilBot, stride)  _scrollRegionDownB(ab, cr, ilBot, cols)
+                                    _scrollRegionDownB(bb, cr, ilBot, cols)    _scrollRegionDownB(ub, cr, ilBot, cols)
+                                    _blankFullRowB(gb, ab, bb, ub, cr, cols)
+                                    kk = kk + 1
+                                }
+                                cc = 0
+                            }
+                        }
+                        if fin == 77 {                   // 'M' DL — delete p0 lines at cursor
+                            let dlBot = scrollBot  if scrollTop == 0 && scrollBot == 0 { dlBot = rows - 1 }
+                            if cr >= scrollTop && cr <= dlBot {
+                                let kk = 0
+                                while kk < p0 && cr + kk <= dlBot {
+                                    _scrollRegionBytesB(gb, cr, dlBot, stride, 1, cols)  _scrollRegionBytesB(ab, cr, dlBot, cols, 1, cols)
+                                    _scrollRegionBytesB(bb, cr, dlBot, cols, 1, cols)    _scrollRegionBytesB(ub, cr, dlBot, cols, 1, cols)
+                                    _blankFullRowB(gb, ab, bb, ub, dlBot, cols)
+                                    kk = kk + 1
+                                }
+                                cc = 0
+                            }
+                        }
+                        if fin == 88 {                   // 'X' ECH — erase p0 chars at cursor (no shift)
+                            let ec = cc + p0  if ec > cols { ec = cols }
+                            let cnt = ec - cc  let o = cr * cols + cc
+                            _blankCellsB(gb, o, cnt)  _fillB(ab, o, cnt, 1)  _fillB(bb, o, cnt, 1)  _fillB(ub, o, cnt, 0)
+                        }
                         if fin == 74 {                   // 'J' erase in display (honour param)
                             let pj = _leadInt(params, 0)
                             let ja = 0
@@ -542,6 +591,15 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                         } else {
                             if k == 55 { scr = cr  scc = cc  spen = pen }    // ESC 7 save cursor
                             if k == 56 { cr = scr  cc = scc  pen = spen }    // ESC 8 restore cursor
+                            if k == 77 {                                     // ESC M = RI reverse index
+                                let riTop = scrollTop
+                                let riBot = scrollBot  if scrollTop == 0 && scrollBot == 0 { riBot = rows - 1 }
+                                if cr == riTop {
+                                    _scrollRegionDownB(gb, riTop, riBot, stride)  _scrollRegionDownB(ab, riTop, riBot, cols)
+                                    _scrollRegionDownB(bb, riTop, riBot, cols)    _scrollRegionDownB(ub, riTop, riBot, cols)
+                                    _blankFullRowB(gb, ab, bb, ub, riTop, cols)
+                                } else { if cr > 0 { cr = cr - 1 } }
+                            }
                             if k == 99 {                                     // ESC c = RIS full reset
                                 _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)  _fillB(ub, 0, total, 0)
                                 cr = 0  cc = 0  pen = 257  pw = 0  g0gfx = 0  altActive = 0  scrollTop = 0  scrollBot = 0
