@@ -447,6 +447,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
     let g0gfx = _cf(tail, 17)            // G0 = DEC special graphics (ESC ( 0) for line-drawing
     let scrollTop = _cf(tail, 18)        // DECSTBM scroll region top (0-based)
     let scrollBot = _cf(tail, 19)        // DECSTBM scroll region bottom; (0,0) = full screen
+    let nowrap = _cf(tail, 20)           // DECAWM off (1) — last column overwrites instead of wrapping
     let scrolled = ""                    // rows scrolled off THIS feed (reset each call)
     let bell = 0                         // bare BEL (0x07) seen THIS feed (reset each call)
     let n = len(s)
@@ -576,6 +577,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                                 if mode == 25 { cvis = on }                                        // cursor show/hide
                                 if mode == 2004 { pasteMode = on }                                 // bracketed paste
                                 if mode == 1004 { focusMode = on }                                 // focus reporting
+                                if mode == 7 { if on == 1 { nowrap = 0 } else { nowrap = 1 } }      // DECAWM autowrap
                                 if mode == 1049 || mode == 1047 || mode == 47 {                    // alt screen
                                     if on == 1 {
                                         if altActive == 0 {
@@ -640,7 +642,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                             }
                             if k == 99 {                                     // ESC c = RIS full reset
                                 _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)  _fillB(ub, 0, total, 0)
-                                cr = 0  cc = 0  pen = 257  pw = 0  g0gfx = 0  altActive = 0  scrollTop = 0  scrollBot = 0
+                                cr = 0  cc = 0  pen = 257  pw = 0  g0gfx = 0  altActive = 0  scrollTop = 0  scrollBot = 0  nowrap = 0
                             }
                             i = i + 2                        // ESC x (2-byte)
                         }
@@ -706,7 +708,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                                 bufSetByte(ab, idx, pfg)
                                 bufSetByte(bb, idx, pbg)
                                 bufSetByte(ub, idx, pul)
-                                if cc >= cols - 1 { pw = 1 }                     // at last column -> defer wrap
+                                if cc >= cols - 1 { if nowrap == 0 { pw = 1 } }  // last col: defer wrap (unless DECAWM off)
                                 else { cc = cc + 1 }
                                 i = i + clen
                             } else { if c == 7 { bell = 1 }  i = i + 1 }          // BEL (bell) / other control byte
@@ -717,7 +719,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
         }
     }
 
-    emit cr + "," + cc + "," + pen + "," + scr + "," + scc + "," + spen + "," + pw + "," + bell + "," + mlevel + "," + msgr + "," + altActive + "," + savedAltCr + "," + savedAltCc + "," + cvis + "," + cshape + "," + pasteMode + "," + focusMode + "," + g0gfx + "," + scrollTop + "," + scrollBot + fromCharCode(1) + scrolled + fromCharCode(1) + savedGrids
+    emit cr + "," + cc + "," + pen + "," + scr + "," + scc + "," + spen + "," + pw + "," + bell + "," + mlevel + "," + msgr + "," + altActive + "," + savedAltCr + "," + savedAltCc + "," + cvis + "," + cshape + "," + pasteMode + "," + focusMode + "," + g0gfx + "," + scrollTop + "," + scrollBot + "," + nowrap + fromCharCode(1) + scrolled + fromCharCode(1) + savedGrids
 }
 
 // _renderRow(grid, attr, battr, base, cols) — one cell-row (base = row*cols)
