@@ -28,6 +28,8 @@ module stem_term
 func _isLetter(c) {
     emit (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
 }
+// a CSI final byte is 0x40..0x7E — letters PLUS @ ` ~ { etc. (ICH '@', HPA '`', …)
+func _isCsiFinal(c) { if c >= 64 && c <= 126 { emit 1 }  emit 0 }
 
 // _leadInt(s, def) — leading non-negative integer in s; `def` if none.
 func _leadInt(s, def) {
@@ -200,6 +202,34 @@ func _scrollRegionDownB(b, top, bot, rowBytes) {
 func _blankFullRowB(gb, ab, bb, ub, r, cols) {
     _blankCellsB(gb, r * cols, cols)  _fillB(ab, r * cols, cols, 1)
     _fillB(bb, r * cols, cols, 1)  _fillB(ub, r * cols, cols, 0)
+    emit 0
+}
+func _cellMoveB(gb, ab, bb, ub, dstCell, srcCell) {   // copy one cell (all 4 planes)
+    let d = dstCell * 5  let s = srcCell * 5
+    bufSetByte(gb, d, toInt(bufGetByte(gb, s)))      bufSetByte(gb, d + 1, toInt(bufGetByte(gb, s + 1)))
+    bufSetByte(gb, d + 2, toInt(bufGetByte(gb, s + 2)))  bufSetByte(gb, d + 3, toInt(bufGetByte(gb, s + 3)))
+    bufSetByte(gb, d + 4, toInt(bufGetByte(gb, s + 4)))
+    bufSetByte(ab, dstCell, toInt(bufGetByte(ab, srcCell)))
+    bufSetByte(bb, dstCell, toInt(bufGetByte(bb, srcCell)))
+    bufSetByte(ub, dstCell, toInt(bufGetByte(ub, srcCell)))
+    emit 0
+}
+// ICH: insert n blanks at (row,col), shifting the rest of the line right (off the edge).
+func _rowInsertB(gb, ab, bb, ub, row, col, n, cols) {
+    let base = row * cols
+    let c = cols - 1
+    while c >= col + n { _cellMoveB(gb, ab, bb, ub, base + c, base + c - n)  c = c - 1 }
+    let bn = n  if col + bn > cols { bn = cols - col }
+    _blankCellsB(gb, base + col, bn)  _fillB(ab, base + col, bn, 1)  _fillB(bb, base + col, bn, 1)  _fillB(ub, base + col, bn, 0)
+    emit 0
+}
+// DCH: delete n chars at (row,col), shifting the rest left; blank the line tail.
+func _rowDeleteB(gb, ab, bb, ub, row, col, n, cols) {
+    let base = row * cols
+    let c = col
+    while c + n < cols { _cellMoveB(gb, ab, bb, ub, base + c, base + c + n)  c = c + 1 }
+    let bs = cols - n  if bs < col { bs = col }
+    _blankCellsB(gb, base + bs, cols - bs)  _fillB(ab, base + bs, cols - bs, 1)  _fillB(bb, base + bs, cols - bs, 1)  _fillB(ub, base + bs, cols - bs, 0)
     emit 0
 }
 func _renderRowB(gb, ab, bb, base, cols) {       // one cell-row -> text, from buffers (for scrolled)
@@ -431,7 +461,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                 let k = charCode(substring(s, i + 1, i + 2))
                 if k == 91 {                           // '[' → CSI
                     let j = i + 2
-                    while j < n && _isLetter(charCode(substring(s, j, j + 1))) == 0 { j = j + 1 }
+                    while j < n && _isCsiFinal(charCode(substring(s, j, j + 1))) == 0 { j = j + 1 }
                     if j >= n { i = n }
                     else {
                         let fin = charCode(substring(s, j, j + 1))
@@ -503,6 +533,14 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                             let ec = cc + p0  if ec > cols { ec = cols }
                             let cnt = ec - cc  let o = cr * cols + cc
                             _blankCellsB(gb, o, cnt)  _fillB(ab, o, cnt, 1)  _fillB(bb, o, cnt, 1)  _fillB(ub, o, cnt, 0)
+                        }
+                        if fin == 64 {                   // '@' ICH — insert p0 blanks at cursor
+                            let ni = p0  if ni > cols - cc { ni = cols - cc }
+                            if ni > 0 { _rowInsertB(gb, ab, bb, ub, cr, cc, ni, cols) }
+                        }
+                        if fin == 80 {                   // 'P' DCH — delete p0 chars at cursor
+                            let nd = p0  if nd > cols - cc { nd = cols - cc }
+                            if nd > 0 { _rowDeleteB(gb, ab, bb, ub, cr, cc, nd, cols) }
                         }
                         if fin == 74 {                   // 'J' erase in display (honour param)
                             let pj = _leadInt(params, 0)
@@ -817,7 +855,7 @@ func gridSafeLen(s) {
                 let j = q + 1
                 let done = 0
                 while j < n {
-                    if _isLetter(charCode(substring(s, j, j + 1))) == 1 { done = 1  j = n }
+                    if _isCsiFinal(charCode(substring(s, j, j + 1))) == 1 { done = 1  j = n }
                     else { j = j + 1 }
                 }
                 if done == 0 { escCut = lastEsc }
