@@ -876,6 +876,13 @@ func gridCshapeM(meta) {
 func gridBellM(meta) {
     emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 7)
 }
+func gridPasteM(meta) {                  // 1 if bracketed paste (DECSET 2004) is on
+    emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 15)
+}
+func gridMouseM(meta) {                  // "mlevel,msgr": app mouse tracking + SGR(1006) flag
+    let tail = substring(meta, 0, indexOf(meta, fromCharCode(1)))
+    emit _cf(tail, 8) + "," + _cf(tail, 9)
+}
 func gridScrolledM(meta) {
     let sohp = indexOf(meta, fromCharCode(1))
     let afterSoh = substring(meta, sohp + 1, len(meta))

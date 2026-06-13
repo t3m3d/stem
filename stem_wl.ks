@@ -108,6 +108,35 @@ func kShiftAlpha(c, shift) {
     emit c
 }
 
+// write a pasted clipboard string to the pty, wrapping it in bracketed-paste
+// markers (ESC[200~ … ESC[201~) when the app enabled DECSET 2004 — keeps vim &
+// friends from auto-indenting the pasted block.
+func kSendPaste(m, clip, meta) {
+    if len(clip) <= 0 { emit 0 }
+    if gridPasteM(meta) == 1 {
+        let e = fromCharCode(27)
+        let w = e + "[200~" + clip + e + "[201~"
+        fdWrite(m, w, len(w))
+    } else {
+        fdWrite(m, clip, len(clip))
+    }
+    emit 0
+}
+
+// encode a mouse event for the app: SGR 1006 (ESC[<b;col;row;M/m, msgr==1) or the
+// legacy X10 form (ESC[M b+32 col+32 row+32). col/row are 0-based here.
+func kMouseSeq(msgr, btn, col, row, press) {
+    let e = fromCharCode(27)
+    if msgr == 1 {
+        let tm = "M"  if press == 0 { tm = "m" }
+        emit e + "[<" + btn + ";" + (col + 1) + ";" + (row + 1) + tm
+    }
+    let cc = col + 33  if cc > 255 { cc = 255 }
+    let rr = row + 33  if rr > 255 { rr = 255 }
+    let lb = btn  if press == 0 { lb = 3 }     // legacy: any release = button 3
+    emit e + "[M" + fromCharCode(lb + 32) + fromCharCode(cc) + fromCharCode(rr)
+}
+
 // xterm-256 colour index (0..255) -> packed 0xRRGGBB.
 func xterm256rgb(idx) {
     // base-16: One Dark palette (readable on a dark bg — the VGA defaults made
@@ -553,7 +582,7 @@ just run {
     // mouse selection (live screen only): drag left button to select, release copies
     let selecting = 0  let hasSel = 0
     let selSR = 0  let selSC = 0  let selER = 0  let selEC = 0
-    let ptrR = 0   let ptrC = 0
+    let ptrR = 0   let ptrC = 0   let heldBtn = 0 - 1   // SGR button held for drag reporting (-1 none)
     let eb = bufNew(8192)              // reused every loop (was leaking 8KB/iteration)
     let fbMem = 0  let fbPx = 0  let fbPool = 0  let fbSz = 0   // shared framebuffer, reused across frames
     while running == 1 {
@@ -621,7 +650,7 @@ just run {
                             if shift == 1 && kc == 118 { isPaste = 1 }
                             if isPaste == 1 {
                                 let clip = exec("wl-paste -n 2>/dev/null")
-                                if len(clip) > 0 { fdWrite(m, clip, len(clip)) }
+                                kSendPaste(m, clip, meta)
                                 if scrollOff != 0 { scrollOff = 0  dirty = 1 }
                             } else {
                                 if scrollOff != 0 { scrollOff = 0  dirty = 1 }   // any other key jumps back to live
@@ -634,14 +663,36 @@ just run {
                 if obj == PTR && op == 2 {                   // wl_pointer.motion -> track cell
                     let px = toInt(wlU32(eb, off + 12)) / 256   // wl_fixed -> px
                     let py = toInt(wlU32(eb, off + 16)) / 256
-                    ptrC = (px - 4) / 8   if ptrC < 0 { ptrC = 0 }  if ptrC >= cols { ptrC = cols - 1 }
-                    ptrR = (py - 2) / 16  if ptrR < 0 { ptrR = 0 }  if ptrR >= rows { ptrR = rows - 1 }
+                    let nC = (px - 4) / 8   if nC < 0 { nC = 0 }  if nC >= cols { nC = cols - 1 }
+                    let nR = (py - 2) / 16  if nR < 0 { nR = 0 }  if nR >= rows { nR = rows - 1 }
+                    let moved = 0  if nC != ptrC || nR != ptrR { moved = 1 }
+                    ptrC = nC  ptrR = nR
                     if selecting == 1 { selER = ptrR  selEC = ptrC  hasSel = 1  dirty = 1 }
+                    if moved == 1 && heldBtn >= 0 && shift == 0 {   // drag while app tracks the mouse
+                        let amM = gridMouseM(meta)
+                        let amcM = indexOf(amM, ",")
+                        if toInt(substring(amM, 0, amcM)) >= 2 {    // button-drag / any-motion tracking
+                            let seq = kMouseSeq(toInt(substring(amM, amcM + 1, len(amM))), heldBtn + 32, ptrC, ptrR, 1)
+                            fdWrite(m, seq, len(seq))
+                        }
+                    }
                 }
                 if obj == PTR && op == 3 {                   // wl_pointer.button
                     let btn = wlU32(eb, off + 16)            // BTN_LEFT = 272
                     let bstate = wlU32(eb, off + 20)         // 1 = pressed
-                    if btn == 272 {
+                    let amB = gridMouseM(meta)               // "mlevel,msgr"
+                    let amcB = indexOf(amB, ",")
+                    let mlevelB = toInt(substring(amB, 0, amcB))
+                    let msgrB = toInt(substring(amB, amcB + 1, len(amB)))
+                    if mlevelB > 0 && shift == 0 {           // app grabs the mouse (Shift = local override)
+                        let mbtn = 0 - 1
+                        if btn == 272 { mbtn = 0 }  if btn == 274 { mbtn = 1 }  if btn == 273 { mbtn = 2 }
+                        if mbtn >= 0 {
+                            let seq = kMouseSeq(msgrB, mbtn, ptrC, ptrR, bstate)
+                            fdWrite(m, seq, len(seq))
+                            if bstate == 1 { heldBtn = mbtn } else { heldBtn = 0 - 1 }
+                        }
+                    } else { if btn == 272 {
                         if bstate == 1 {                     // press: anchor selection at cursor cell
                             selecting = 1  hasSel = 0
                             selSR = ptrR  selSC = ptrC  selER = ptrR  selEC = ptrC
@@ -661,23 +712,34 @@ just run {
                     // middle-click pastes the PRIMARY selection (the Linux idiom)
                     if btn == 274 && bstate == 1 {
                         let clip = exec("wl-paste --primary -n 2>/dev/null")
-                        if len(clip) > 0 { fdWrite(m, clip, len(clip)) }
+                        kSendPaste(m, clip, meta)
                         if scrollOff != 0 { scrollOff = 0  dirty = 1 }
+                    }
                     }
                 }
                 if obj == PTR && op == 4 {                   // wl_pointer.axis (scroll wheel)
                     let ax = wlU32(eb, off + 12)             // 0 = vertical
                     if ax == 0 {
-                        let msb = toInt(bufGetByte(eb, off + 19))   // sign byte of the wl_fixed value (LE MSB)
-                        if msb >= 128 {                      // negative -> wheel up -> into history
-                            scrollOff = scrollOff + 3
-                            let maxOff = toInt(lineCount(scrollback))
-                            if scrollOff > maxOff { scrollOff = maxOff }
-                            dirty = 1
-                        } else {                             // positive -> wheel down -> toward live
-                            scrollOff = scrollOff - 3
-                            if scrollOff < 0 { scrollOff = 0 }
-                            dirty = 1
+                        let msb = toInt(bufGetByte(eb, off + 19))   // sign byte (negative = up)
+                        let amW = gridMouseM(meta)
+                        let amcW = indexOf(amW, ",")
+                        let mlevelW = toInt(substring(amW, 0, amcW))
+                        let msgrW = toInt(substring(amW, amcW + 1, len(amW)))
+                        if mlevelW > 0 && shift == 0 {       // app wants the wheel (less/vim scroll)
+                            let wb = 65  if msb >= 128 { wb = 64 }   // 64 = wheel up, 65 = down
+                            let seq = kMouseSeq(msgrW, wb, ptrC, ptrR, 1)
+                            fdWrite(m, seq, len(seq))
+                        } else {
+                            if msb >= 128 {                  // up -> into history
+                                scrollOff = scrollOff + 3
+                                let maxOff = toInt(lineCount(scrollback))
+                                if scrollOff > maxOff { scrollOff = maxOff }
+                                dirty = 1
+                            } else {                         // down -> toward live
+                                scrollOff = scrollOff - 3
+                                if scrollOff < 0 { scrollOff = 0 }
+                                dirty = 1
+                            }
                         }
                     }
                 }
