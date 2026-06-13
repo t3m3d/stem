@@ -219,8 +219,9 @@ func _rgb256(r, g, b) {
 func _applySgr(pen, params) {
     let n = len(params)
     if n == 0 { emit 257 }
-    let rev = pen / 65536            // reverse-video flag carried in the pen's high bits
-    let base = pen - rev * 65536
+    let ul = pen / 131072            // underline flag (pen bit 17)
+    let rev = (pen - ul * 131072) / 65536   // reverse-video flag (pen bit 16)
+    let base = pen - ul * 131072 - rev * 65536
     let fg = base / 256
     let bg = base - fg * 256
     let i = 0
@@ -251,9 +252,11 @@ func _applySgr(pen, params) {
                 else { if stage == 1 { if cur == 5 { stage = 2 } else { if cur == 2 { stage = 5 } else { stage = 0 } } }
                 else { if stage == 3 { if cur == 5 { stage = 4 } else { if cur == 2 { stage = 8 } else { stage = 0 } } }
                 else {
-                    if cur == 0 { fg = 1  bg = 1  bold = 0  rev = 0 }
+                    if cur == 0 { fg = 1  bg = 1  bold = 0  rev = 0  ul = 0 }
                     if cur == 1 { bold = 1 }                         // bold/bright
                     if cur == 22 { bold = 0 }                        // normal intensity
+                    if cur == 4 { ul = 1 }                           // underline on
+                    if cur == 24 { ul = 0 }                          // underline off
                     if cur == 7 { rev = 1 }                          // reverse video on
                     if cur == 27 { rev = 0 }                         // reverse video off
                     if cur == 38 { stage = 1 }
@@ -275,7 +278,7 @@ func _applySgr(pen, params) {
         i = i + 1
     }
     if bold == 1 && fg >= 2 && fg <= 9 { fg = fg + 8 }   // standard fg 0-7 -> bright 8-15
-    emit rev * 65536 + fg * 256 + bg
+    emit ul * 131072 + rev * 65536 + fg * 256 + bg
 }
 
 // _sgrPair(fg, bg) — ANSI to set (fg,bg); 1 = default, else 256-colour index+2.
@@ -331,9 +334,9 @@ func _decGfx(c) {
 }
 
 func gridInitMeta() { emit "0,0,257,0,0,257,0,0,0,0,0,0,0,1,0,0,0" + fromCharCode(1) + fromCharCode(1) }
-func gridBlank(gb, ab, bb, cols, rows) {                   // fill persistent plane buffers blank
+func gridBlank(gb, ab, bb, ub, cols, rows) {               // fill persistent plane buffers blank
     let total = cols * rows
-    _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)
+    _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)  _fillB(ub, 0, total, 0)
     emit 0
 }
 // string-state wrapper (tests / CLI). stem uses gridFeedB directly with persistent
@@ -345,13 +348,14 @@ func gridFeed(state, s, cols, rows) {
     let ab = _sToBuf(substring(state, g5, g5 + total))
     let bb = _sToBuf(substring(state, g5 + total, g5 + 2 * total))
     let meta = substring(state, g5 + 2 * total + 1, len(state))   // tail<SOH>scrolled<SOH>savedGrids
-    let nm = gridFeedB(gb, ab, bb, meta, s, cols, rows)
+    let ub = bufNew(total)                                        // underline plane (discarded for CLI/tests)
+    let nm = gridFeedB(gb, ab, bb, ub, meta, s, cols, rows)
     emit _bufToS(gb, g5) + _bufToS(ab, total) + _bufToS(bb, total) + "|" + nm
 }
 
 // gridFeedB — the real engine. Mutates the plane buffers gb/ab/bb IN PLACE and
 // returns only the (small) meta string. No O(gridsize) work per feed.
-func gridFeedB(gb, ab, bb, meta, s, cols, rows) {
+func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
     let total = cols * rows
     let g5 = 5 * total
     let gtotal = g5
@@ -431,7 +435,7 @@ func gridFeedB(gb, ab, bb, meta, s, cols, rows) {
                             if pj == 1 { jb = cr * cols + cc + 1 }    // start → cursor
                             // pj >= 2: whole screen
                             let jcnt = jb - ja
-                            _blankCellsB(gb, ja, jcnt)  _fillB(ab, ja, jcnt, 1)  _fillB(bb, ja, jcnt, 1)
+                            _blankCellsB(gb, ja, jcnt)  _fillB(ab, ja, jcnt, 1)  _fillB(bb, ja, jcnt, 1)  _fillB(ub, ja, jcnt, 0)
                             if pj >= 2 { cr = 0  cc = 0 }            // clear-all homes (matches kryofetch)
                         }
                         if fin == 75 {                   // 'K' erase in line (honour param)
@@ -443,7 +447,7 @@ func gridFeedB(gb, ab, bb, meta, s, cols, rows) {
                             // pk == 2 (or other): whole line (a=0, b=cols)
                             let cnt = b - a
                             let o1 = cr * cols + a
-                            _blankCellsB(gb, o1, cnt)  _fillB(ab, o1, cnt, 1)  _fillB(bb, o1, cnt, 1)
+                            _blankCellsB(gb, o1, cnt)  _fillB(ab, o1, cnt, 1)  _fillB(bb, o1, cnt, 1)  _fillB(ub, o1, cnt, 0)
                         }
                         if fin == 104 || fin == 108 {    // 'h' DECSET / 'l' DECRST (private '?' modes)
                             if len(params) > 0 && charCode(substring(params, 0, 1)) == 63 {
@@ -462,7 +466,7 @@ func gridFeedB(gb, ab, bb, meta, s, cols, rows) {
                                         if altActive == 0 {
                                             savedGrids = _bufToS(gb, g5) + _bufToS(ab, total) + _bufToS(bb, total)  // save main
                                             savedAltCr = cr  savedAltCc = cc
-                                            _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)
+                                            _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)  _fillB(ub, 0, total, 0)
                                             cr = 0  cc = 0  pw = 0
                                             altActive = 1
                                         }
@@ -471,6 +475,7 @@ func gridFeedB(gb, ab, bb, meta, s, cols, rows) {
                                             _loadBuf(gb, savedGrids, 0, g5)             // restore main (in place)
                                             _loadBuf(ab, savedGrids, g5, total)
                                             _loadBuf(bb, savedGrids, g5 + total, total)
+                                            _fillB(ub, 0, total, 0)   // underline not saved across alt screen
                                             cr = savedAltCr  cc = savedAltCc  pw = 0
                                             savedGrids = ""
                                             altActive = 0
@@ -508,7 +513,7 @@ func gridFeedB(gb, ab, bb, meta, s, cols, rows) {
                             if k == 55 { scr = cr  scc = cc  spen = pen }    // ESC 7 save cursor
                             if k == 56 { cr = scr  cc = scc  pen = spen }    // ESC 8 restore cursor
                             if k == 99 {                                     // ESC c = RIS full reset
-                                _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)
+                                _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)  _fillB(ub, 0, total, 0)
                                 cr = 0  cc = 0  pen = 257  pw = 0  g0gfx = 0  altActive = 0
                             }
                             i = i + 2                        // ESC x (2-byte)
@@ -524,6 +529,7 @@ func gridFeedB(gb, ab, bb, meta, s, cols, rows) {
                     _scrollBytesB(gb, stride, gtotal)  _blankCellsB(gb, (rows - 1) * cols, cols)
                     _scrollBytesB(ab, cols, total)  _fillB(ab, (rows - 1) * cols, cols, 1)
                     _scrollBytesB(bb, cols, total)  _fillB(bb, (rows - 1) * cols, cols, 1)
+                    _scrollBytesB(ub, cols, total)  _fillB(ub, (rows - 1) * cols, cols, 0)
                     cr = rows - 1
                 }
                 i = i + 1
@@ -548,12 +554,14 @@ func gridFeedB(gb, ab, bb, meta, s, cols, rows) {
                                         _scrollBytesB(gb, stride, gtotal)  _blankCellsB(gb, (rows - 1) * cols, cols)
                                         _scrollBytesB(ab, cols, total)  _fillB(ab, (rows - 1) * cols, cols, 1)
                                         _scrollBytesB(bb, cols, total)  _fillB(bb, (rows - 1) * cols, cols, 1)
+                    _scrollBytesB(ub, cols, total)  _fillB(ub, (rows - 1) * cols, cols, 0)
                                         cr = rows - 1
                                     }
                                 }
                                 let idx = cr * cols + cc
-                                let prev = pen / 65536           // reverse flag
-                                let pbase = pen - prev * 65536
+                                let pul = pen / 131072           // underline flag (pen bit 17)
+                                let prev = (pen - pul * 131072) / 65536   // reverse flag (bit 16)
+                                let pbase = pen - pul * 131072 - prev * 65536
                                 let pfg = pbase / 256
                                 let pbg = pbase - pfg * 256
                                 if prev == 1 {                   // reverse: swap fg/bg; default sides -> black/white
@@ -567,6 +575,7 @@ func gridFeedB(gb, ab, bb, meta, s, cols, rows) {
                                 _putCellB(gb, idx, glyph)
                                 bufSetByte(ab, idx, pfg)
                                 bufSetByte(bb, idx, pbg)
+                                bufSetByte(ub, idx, pul)
                                 if cc >= cols - 1 { pw = 1 }                     // at last column -> defer wrap
                                 else { cc = cc + 1 }
                                 i = i + clen

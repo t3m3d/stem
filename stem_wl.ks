@@ -33,7 +33,7 @@ func _wlFind(b, n, iface) {
 // ── minimal keysym(keycode) -> bytes for the shell ───────────────────────────
 // X11 keycodes (wlKeyToKc = evdev+8). Covers printable ASCII via a layout row
 // map + the essential control keys. Full keymap/layout = future.
-func kKeyBytes(kc, shift, ctrl) {
+func kKeyBytes(kc, shift, ctrl, alt) {
     let enter = fromCharCode(13)
     let bs = fromCharCode(127)
     let tab = fromCharCode(9)
@@ -54,6 +54,19 @@ func kKeyBytes(kc, shift, ctrl) {
     if kc == 117 { emit esc + "[6~" }   // Page Down
     if kc == 118 { emit esc + "[2~" }   // Insert
     if kc == 119 { emit esc + "[3~" }   // Delete
+    // function keys F1-F12 (xterm: F1-F4 = SS3, F5-F12 = CSI ~)
+    if kc == 67 { emit esc + "OP" }     // F1
+    if kc == 68 { emit esc + "OQ" }     // F2
+    if kc == 69 { emit esc + "OR" }     // F3
+    if kc == 70 { emit esc + "OS" }     // F4
+    if kc == 71 { emit esc + "[15~" }   // F5
+    if kc == 72 { emit esc + "[17~" }   // F6
+    if kc == 73 { emit esc + "[18~" }   // F7
+    if kc == 74 { emit esc + "[19~" }   // F8
+    if kc == 75 { emit esc + "[20~" }   // F9
+    if kc == 76 { emit esc + "[21~" }   // F10
+    if kc == 95 { emit esc + "[23~" }   // F11
+    if kc == 96 { emit esc + "[24~" }   // F12
     // printable via keyChar layout (shared shape with cortex)
     let ch = kCharOf(kc, shift)
     if ch != "" {
@@ -61,6 +74,7 @@ func kKeyBytes(kc, shift, ctrl) {
             let cc = toInt(charCode(ch))
             if cc >= 97 && cc <= 122 { emit fromCharCode((cc - 96) + "") }
         }
+        if alt == 1 { emit esc + ch }   // Alt/Meta -> ESC-prefixed (word-move, etc.)
         emit ch
     }
     emit ""
@@ -382,7 +396,7 @@ func kCharAtCol(line, col) {
 }
 
 // ── render: stem grid -> framebuffer, per-cell ANSI colour. Block cursor; bell. ──
-func kDrawScreen(px, W, H, font, gb, ab, bb, meta, cols, rows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal) {
+func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal) {
     let back = bg
     if bell == 1 { back = 3355494 }                 // visual-bell flash
     fbClear(px, W, H, back)
@@ -404,6 +418,7 @@ func kDrawScreen(px, W, H, font, gb, ab, bb, meta, cols, rows, bg, fg, bell, cur
             let w = toInt(bufGetByte(gb, off))
             let chcode = kCellCp(gb, off, w)
             if chcode != 32 { stemDrawChar(px, W, H, font, x, y, chcode, cellFg) }
+            if toInt(bufGetByte(ub, idx)) == 1 { fbFillRect(px, W, x, y + 14, 8, 1, cellFg) }   // SGR 4 underline
             c = c + 1
         }
         r = r + 1
@@ -520,11 +535,12 @@ just run {
     fdSetNonblock(fd)                  // wayland fd: poll, don't block
     // persistent plane buffers (mutated in place by gridFeedB — no per-feed alloc)
     let gb = bufNew(5 * cols * rows)  let ab = bufNew(cols * rows)  let bb = bufNew(cols * rows)
-    gridBlank(gb, ab, bb, cols, rows)
+    let ub = bufNew(cols * rows)      // per-cell underline plane (SGR 4)
+    gridBlank(gb, ab, bb, ub, cols, rows)
     let meta = gridInitMeta()
     let pal = palInit()                // live 256-colour palette (OSC 4 overrides)
 
-    let shift = 0  let ctrl = 0
+    let shift = 0  let ctrl = 0  let alt = 0
     let nextId = 12  let prevBuf = 0  let prevPool = 0  let prevMfd = 0
     let dirty = 1  let running = 1  let configured = 0
     let kicked = 0  let kickIn = 0  let kickArmed = 0   // debounced startup Ctrl-L once the shell settles
@@ -564,7 +580,8 @@ just run {
                         cols = (W - 8) / 8  rows = (H - 4) / 16
                         ptySetSize(m, rows, cols)
                         gb = bufNew(5 * cols * rows)  ab = bufNew(cols * rows)  bb = bufNew(cols * rows)
-                        gridBlank(gb, ab, bb, cols, rows)  meta = gridInitMeta()
+                        ub = bufNew(cols * rows)
+                        gridBlank(gb, ab, bb, ub, cols, rows)  meta = gridInitMeta()
                         hasSel = 0  selecting = 0
                         // a running shell redraws on SIGWINCH (ptySetSize above); only
                         // force Ctrl-L for resizes after the startup kick, else it
@@ -579,6 +596,7 @@ just run {
                     let mods = wlU32(eb, off + 12)           // mods_depressed bitmask
                     shift = 0  if bitAnd(mods, 1) != 0 { shift = 1 }   // bit0 = shift
                     ctrl = 0   if bitAnd(mods, 4) != 0 { ctrl = 1 }    // bit2 = ctrl
+                    alt = 0    if bitAnd(mods, 8) != 0 { alt = 1 }     // bit3 = mod1 (Alt/Meta)
                 }
                 if obj == KB && op == 3 {                    // wl_keyboard.key
                     let state = wlU32(eb, off + 20)
@@ -607,7 +625,7 @@ just run {
                                 if scrollOff != 0 { scrollOff = 0  dirty = 1 }
                             } else {
                                 if scrollOff != 0 { scrollOff = 0  dirty = 1 }   // any other key jumps back to live
-                                let bytes = kKeyBytes(kc, shift, ctrl)
+                                let bytes = kKeyBytes(kc, shift, ctrl, alt)
                                 if bytes != "" { fdWrite(m, bytes, len(bytes)) }
                             }
                         } }
@@ -694,7 +712,7 @@ just run {
                 if ocFg >= 0 { fg = ocFg }
                 if ocBg >= 0 { bg = ocBg }
                 if ocCur >= 0 { curColor = ocCur }
-                meta = gridFeedB(gb, ab, bb, meta, fed, cols, rows)
+                meta = gridFeedB(gb, ab, bb, ub, meta, fed, cols, rows)
                 // answer DSR/DA queries (post-feed cursor) so the shell doesn't stall
                 let rep = termReplies(fed, meta, cols, rows)
                 if len(rep) > 0 { fdWrite(m, rep, len(rep)) }
@@ -711,7 +729,7 @@ just run {
             quiet = 0
         } else {
             quiet = quiet + 1
-            if quiet >= 2 && len(pending) > 0 { meta = gridFeedB(gb, ab, bb, meta, pending, cols, rows)  pending = ""  dirty = 1 }
+            if quiet >= 2 && len(pending) > 0 { meta = gridFeedB(gb, ab, bb, ub, meta, pending, cols, rows)  pending = ""  dirty = 1 }
         }
 
         // 3) shell exited?
@@ -736,7 +754,7 @@ just run {
             }
             let px = fbPx
             if scrollOff > 0 { kDrawScrollback(px, W, H, font, scrollback, gb, cols, rows, scrollOff, bg, fg) }
-            else { kDrawScreen(px, W, H, font, gb, ab, bb, meta, cols, rows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal) }
+            else { kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal) }
             let didFlash = bell  bell = 0
             let buf = nextId  nextId = nextId + 1
             wlPoolCreateBuffer(fd, fbPool, buf, 0, W, H, stride, 1)
