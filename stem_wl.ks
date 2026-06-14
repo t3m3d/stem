@@ -559,6 +559,7 @@ func sessNew(cols, rows, shell, term) {
     s = envSet(s, "m", m)        s = envSet(s, "pid", pid)
     s = envSet(s, "gb", gb)      s = envSet(s, "ab", ab)      s = envSet(s, "bb", bb)      s = envSet(s, "ub", ub)
     s = envSet(s, "meta", gridInitMeta())  s = envSet(s, "scrolledOut", "")  s = envSet(s, "pending", "")  s = envSet(s, "title", "stem")
+    s = envSet(s, "bufCap", cols * rows)   // allocated plane capacity (cells); sessResize reuses while need<=cap (no-GC heap)
     s = envSet(s, "scrollOff", 0)  s = envSet(s, "bell", 0)  s = envSet(s, "quiet", 0)  s = envSet(s, "ch", 1)
     s = envSet(s, "kicked", 0)  s = envSet(s, "kickIn", 30)  s = envSet(s, "kickArmed", 1)
     s = envSet(s, "selecting", 0)  s = envSet(s, "hasSel", 0)
@@ -573,7 +574,18 @@ func sessNew(cols, rows, shell, term) {
 func sessResize(s, pcols, prows) {
     let m = envGet(s, "m")
     ptySetSize(m, prows, pcols)
-    let g = bufNew(5 * pcols * prows)  let a = bufNew(pcols * prows)  let b = bufNew(pcols * prows)  let u = bufNew(pcols * prows)
+    // no-GC bump heap: reuse the existing plane buffers when they're already big
+    // enough. Only allocate (and orphan the old buffers) when growing past the
+    // high-water mark. Turns unbounded resize burn into growth-only.
+    let need = pcols * prows
+    let cap = envGet(s, "bufCap")
+    let g = 0  let a = 0  let b = 0  let u = 0
+    if need <= cap {
+        g = envGet(s, "gb")  a = envGet(s, "ab")  b = envGet(s, "bb")  u = envGet(s, "ub")
+    } else {
+        g = bufNew(5 * need)  a = bufNew(need)  b = bufNew(need)  u = bufNew(need)
+        s = envSet(s, "bufCap", need)
+    }
     gridBlank(g, a, b, u, pcols, prows)
     s = envSet(s, "gb", g)  s = envSet(s, "ab", a)  s = envSet(s, "bb", b)  s = envSet(s, "ub", u)
     s = envSet(s, "meta", gridInitMeta())  s = envSet(s, "hasSel", 0)  s = envSet(s, "selecting", 0)  s = envSet(s, "scrollOff", 0)
