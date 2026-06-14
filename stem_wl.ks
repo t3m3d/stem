@@ -429,10 +429,10 @@ func kCharAtCol(line, col) {
 }
 
 // ── render: stem grid -> framebuffer, per-cell ANSI colour. Block cursor; bell. ──
-func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal, yBase) {
+func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal, yBase, xBase, focused) {
     let back = bg
     if bell == 1 { back = 3355494 }                 // visual-bell flash
-    fbClear(px, W, H, back)
+    fbFillRect(px, W, xBase, yBase, cols * 8 + 8, rows * 16 + 2, back)   // clear THIS pane's rect (panes composite)
     let total = cols * rows
     // read every cell straight from the plane buffers — no per-frame string alloc.
     let r = 0
@@ -441,7 +441,7 @@ func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell,
         while c < cols {
             let idx = r * cols + c
             let off = idx * 5
-            let x = 4 + c * 8  let y = yBase + r * 16
+            let x = xBase + 4 + c * 8  let y = yBase + r * 16
             let cellFg = kColorOf(toInt(bufGetByte(ab, idx)), fg, pal)
             let cellBg = kColorOf(toInt(bufGetByte(bb, idx)), back, pal)
             if hasSel == 1 && kInSel(r, c, cols, selSR, selSC, selER, selEC) == 1 {
@@ -462,7 +462,7 @@ func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell,
     let cr = toInt(substring(cur, 0, comma))
     let cc = toInt(substring(cur, comma + 1, len(cur)))
     if cr >= 0 && cr < rows && cc >= 0 && cc < cols {
-        let cx = 4 + cc * 8  let cy = yBase + cr * 16
+        let cx = xBase + 4 + cc * 8  let cy = yBase + cr * 16
         let coff = (cr * cols + cc) * 5
         let cglyph = kCellCp(gb, coff, toInt(bufGetByte(gb, coff)))   // cursor cell glyph (from buffer)
         let cstyle = curStyle                            // app DECSCUSR overrides the config default
@@ -470,7 +470,13 @@ func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell,
         if appShape == 1 { cstyle = 1 }                 // bar
         if appShape == 2 { cstyle = 0 }                 // block
         if appShape == 3 { cstyle = 2 }                 // underline
-        if cstyle == 1 {                                // bar: 2px at cell left, glyph normal
+        if focused == 0 {                               // unfocused pane: hollow outline, glyph normal
+            fbFillRect(px, W, cx, cy, 8, 1, curColor)
+            fbFillRect(px, W, cx, cy + 15, 8, 1, curColor)
+            fbFillRect(px, W, cx, cy, 1, 16, curColor)
+            fbFillRect(px, W, cx + 7, cy, 1, 16, curColor)
+            if cglyph != 32 { stemDrawChar(px, W, H, font, cx, cy, cglyph, fg) }
+        } else { if cstyle == 1 {                       // bar: 2px at cell left, glyph normal
             fbFillRect(px, W, cx, cy, 2, 16, curColor)
             if cglyph != 32 { stemDrawChar(px, W, H, font, cx, cy, cglyph, fg) }
         } else {
@@ -481,22 +487,29 @@ func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell,
                 fbFillRect(px, W, cx, cy, 8, 16, curColor)
                 if cglyph != 32 { stemDrawChar(px, W, H, font, cx, cy, cglyph, back) }
             }
-        }
+        } }
     }
 }
 
+// pane geometry for a 2-way split. split: 0=single, 1=vertical (side by side,
+// 1-col gutter), 2=horizontal (stacked, 1-row gutter). p = pane index 0|1.
+func paneCols(split, p, cols, trows) { if split == 1 { let c0 = (cols - 1) / 2  if p == 0 { emit c0 }  emit cols - 1 - c0 }  emit cols }
+func paneRows(split, p, cols, trows) { if split == 2 { let r0 = (trows - 1) / 2  if p == 0 { emit r0 }  emit trows - 1 - r0 }  emit trows }
+func paneCellX(split, p, cols, trows) { if split == 1 && p == 1 { emit (cols - 1) / 2 + 1 }  emit 0 }
+func paneCellY(split, p, cols, trows) { if split == 2 && p == 1 { emit (trows - 1) / 2 + 1 }  emit 0 }
+
 // scrollback view: history + live grid, offset up by scrollOff lines (monochrome —
 // scrolled-off rows are stored as plain text). A "▲" marks we're not at the bottom.
-func kDrawScrollback(px, W, H, font, scrollback, gb, cols, rows, scrollOff, bg, fg, yBase) {
-    fbClear(px, W, H, bg)
+func kDrawScrollback(px, W, H, font, scrollback, gb, cols, rows, scrollOff, bg, fg, yBase, xBase) {
+    fbFillRect(px, W, xBase, yBase, cols * 8 + 8, rows * 16 + 2, bg)
     let view = gridScrollView(scrollback, gridPlainB(gb, cols, rows), rows, scrollOff)
     let r = 0
     while r < rows {
         let line = gridStripSgr(getLine(view, r))   // history rows carry SGR; strip for the mono view
-        fbDrawText(px, W, H, font, 4, yBase + r * 16, line, fg)
+        fbDrawText(px, W, H, font, xBase + 4, yBase + r * 16, line, fg)
         r = r + 1
     }
-    fbDrawText(px, W, H, font, W - 80, yBase, "^" + scrollOff + " (shift+pgdn=back)", 16776960)   // scroll indicator
+    fbDrawText(px, W, H, font, xBase + cols * 8 - 76, yBase, "^" + scrollOff + " (shift+pgdn=back)", 16776960)   // scroll indicator
 }
 
 // the tab bar across row 0: one segment per tab (number + short title), the active
@@ -550,6 +563,21 @@ func sessNew(cols, rows, shell, term) {
     s = envSet(s, "kicked", 0)  s = envSet(s, "kickIn", 30)  s = envSet(s, "kickArmed", 1)
     s = envSet(s, "scrollback", "")  s = envSet(s, "selecting", 0)  s = envSet(s, "hasSel", 0)
     s = envSet(s, "selSR", 0)  s = envSet(s, "selSC", 0)  s = envSet(s, "selER", 0)  s = envSet(s, "selEC", 0)
+    s = envSet(s, "split", 0)  s = envSet(s, "pfocus", 0)   // splits: 0=single pane, focus pane 0
+    emit s
+}
+
+// resize a session to pcols x prows: tell the PTY, realloc the plane buffers,
+// blank them, reset meta/selection, and Ctrl-L so the shell repaints. Used by
+// split / unsplit / window-resize. Returns the updated session env.
+func sessResize(s, pcols, prows) {
+    let m = envGet(s, "m")
+    ptySetSize(m, prows, pcols)
+    let g = bufNew(5 * pcols * prows)  let a = bufNew(pcols * prows)  let b = bufNew(pcols * prows)  let u = bufNew(pcols * prows)
+    gridBlank(g, a, b, u, pcols, prows)
+    s = envSet(s, "gb", g)  s = envSet(s, "ab", a)  s = envSet(s, "bb", b)  s = envSet(s, "ub", u)
+    s = envSet(s, "meta", gridInitMeta())  s = envSet(s, "hasSel", 0)  s = envSet(s, "selecting", 0)  s = envSet(s, "scrollOff", 0)
+    fdWrite(m, fromCharCode(12), 1)
     emit s
 }
 
@@ -677,17 +705,24 @@ just run {
     let fbMem = 0  let fbPx = 0  let fbPool = 0  let fbSz = 0   // shared framebuffer, reused across frames
     let switchTo = 0 - 1  let wantNew = 0  let wantClose = 0     // deferred tab ops (applied after events)
     let wantResize = 0  let wantW = 0  let wantH = 0
+    let wantSplit = 0  let wantUnsplit = 0  let togFocus = 0       // deferred split ops
     let yBase = 2  if tabsOn == 1 { yBase = 18 }                 // grid top: below the tab bar, or flush when no bar
     while running == 1 {
         switchTo = 0 - 1  wantNew = 0  wantClose = 0  wantResize = 0   // reset deferred ops each frame
-        // load the ACTIVE tab's per-session state into working locals for this frame
+        wantSplit = 0  wantUnsplit = 0  togFocus = 0
+        // load the ACTIVE tab + its FOCUSED pane into working locals for this frame.
+        // pane 0 = the tab env's own m/gb/.. ; pane 1 = the nested "pane1" sub-env.
         let act = envGet(sessions, "" + active)
-        let m = envGet(act, "m")
-        let gb = envGet(act, "gb")  let ab = envGet(act, "ab")  let bb = envGet(act, "bb")  let ub = envGet(act, "ub")
-        let meta = envGet(act, "meta")  let scrollback = envGet(act, "scrollback")  let bell = envGet(act, "bell")
-        let scrollOff = envGet(act, "scrollOff")
-        let selecting = envGet(act, "selecting")  let hasSel = envGet(act, "hasSel")
-        let selSR = envGet(act, "selSR")  let selSC = envGet(act, "selSC")  let selER = envGet(act, "selER")  let selEC = envGet(act, "selEC")
+        let split = envGet(act, "split")  let pfocus = envGet(act, "pfocus")
+        let fenv = act  if pfocus == 1 { fenv = envGet(act, "pane1") }
+        let fcols = paneCols(split, pfocus, cols, trows)  let frows = paneRows(split, pfocus, cols, trows)
+        let fcellX = paneCellX(split, pfocus, cols, trows)  let fcellY = paneCellY(split, pfocus, cols, trows)
+        let m = envGet(fenv, "m")
+        let gb = envGet(fenv, "gb")  let ab = envGet(fenv, "ab")  let bb = envGet(fenv, "bb")  let ub = envGet(fenv, "ub")
+        let meta = envGet(fenv, "meta")  let scrollback = envGet(fenv, "scrollback")  let bell = envGet(fenv, "bell")
+        let scrollOff = envGet(fenv, "scrollOff")
+        let selecting = envGet(fenv, "selecting")  let hasSel = envGet(fenv, "hasSel")
+        let selSR = envGet(fenv, "selSR")  let selSC = envGet(fenv, "selSC")  let selER = envGet(fenv, "selER")  let selEC = envGet(fenv, "selEC")
         // 1) drain wayland events (non-blocking)
         let en = wlRecvInto(fd, eb, 8192)
         let off = 0
@@ -726,17 +761,22 @@ just run {
                             if ctrl == 1 && shift == 0 && kc == 117 { switchTo = active + 1  tabKey = 1 }  // Ctrl-PgDn next
                             if alt == 1 && kc >= 10 && kc <= 18 { switchTo = kc - 10  tabKey = 1 }    // Alt-1..9 jump
                         }
+                        // ── splits (always on, incl. Hyprland: subdivide one window) ──
+                        if ctrl == 1 && shift == 1 && kc == 40 { wantSplit = 1  tabKey = 1 }      // Ctrl-Shift-D vertical |
+                        if ctrl == 1 && shift == 1 && kc == 26 { wantSplit = 2  tabKey = 1 }      // Ctrl-Shift-E horizontal -
+                        if ctrl == 1 && shift == 1 && kc == 32 { togFocus = 1  tabKey = 1 }       // Ctrl-Shift-O switch pane
+                        if ctrl == 1 && shift == 1 && kc == 53 { wantUnsplit = 1  tabKey = 1 }    // Ctrl-Shift-X close pane
                         if tabKey == 0 {
                         if hasSel == 1 { hasSel = 0  dirty = 1 }     // typing clears the selection
                         // Shift+PageUp/Down scrolls the scrollback (not sent to shell).
                         if shift == 1 && kc == 112 {
-                            scrollOff = scrollOff + trows - 2
+                            scrollOff = scrollOff + frows - 2
                             let maxOff = toInt(lineCount(scrollback))
                             if scrollOff > maxOff { scrollOff = maxOff }
                             dirty = 1
                         }
                         else { if shift == 1 && kc == 117 {
-                            scrollOff = scrollOff - (trows - 2)
+                            scrollOff = scrollOff - (frows - 2)
                             if scrollOff < 0 { scrollOff = 0 }
                             dirty = 1
                         } else {
@@ -760,8 +800,8 @@ just run {
                 if obj == PTR && op == 2 {                   // wl_pointer.motion -> track cell
                     let px = toInt(wlU32(eb, off + 12)) / 256   // wl_fixed -> px
                     let py = toInt(wlU32(eb, off + 16)) / 256
-                    let nC = (px - 4) / 8    if nC < 0 { nC = 0 }  if nC >= cols { nC = cols - 1 }
-                    let nR = (py - yBase) / 16  if nR < 0 { nR = 0 }  if nR >= trows { nR = trows - 1 }   // below the tab bar
+                    let nC = (px - 4 - fcellX * 8) / 8       if nC < 0 { nC = 0 }  if nC >= fcols { nC = fcols - 1 }   // focused-pane local
+                    let nR = (py - yBase - fcellY * 16) / 16  if nR < 0 { nR = 0 }  if nR >= frows { nR = frows - 1 }
                     let moved = 0  if nC != ptrC || nR != ptrR { moved = 1 }
                     ptrC = nC  ptrR = nR
                     if selecting == 1 { selER = ptrR  selEC = ptrC  hasSel = 1  dirty = 1 }
@@ -797,7 +837,7 @@ just run {
                         } else {                             // release: copy selection to clipboard
                             selecting = 0
                             if hasSel == 1 && scrollOff == 0 {
-                                let seltext = kSelText(gb, cols, trows, selSR, selSC, selER, selEC)
+                                let seltext = kSelText(gb, fcols, frows, selSR, selSC, selER, selEC)
                                 if len(seltext) > 0 {
                                     writeFile("/tmp/.stem_sel", seltext)
                                     exec("wl-copy < /tmp/.stem_sel 2>/dev/null")
@@ -843,24 +883,45 @@ just run {
                 off = off + s
             }
         }
-        // ── save the active tab's input-modified state back into its env ──
-        act = envSet(act, "scrollOff", scrollOff)  act = envSet(act, "selecting", selecting)  act = envSet(act, "hasSel", hasSel)
-        act = envSet(act, "selSR", selSR)  act = envSet(act, "selSC", selSC)  act = envSet(act, "selER", selER)  act = envSet(act, "selEC", selEC)
-        act = envSet(act, "bell", bell)
+        // ── save the focused pane's input-modified state back into its env ──
+        fenv = envSet(fenv, "scrollOff", scrollOff)  fenv = envSet(fenv, "selecting", selecting)  fenv = envSet(fenv, "hasSel", hasSel)
+        fenv = envSet(fenv, "selSR", selSR)  fenv = envSet(fenv, "selSC", selSC)  fenv = envSet(fenv, "selER", selER)  fenv = envSet(fenv, "selEC", selEC)
+        fenv = envSet(fenv, "bell", bell)
+        if pfocus == 1 { act = envSet(act, "pane1", fenv) } else { act = fenv }
+
+        // ── split ops (operate on the active tab) ──
+        if togFocus == 1 && split != 0 { pfocus = 1 - pfocus  dirty = 1 }
+        if wantSplit != 0 && split == 0 {
+            split = wantSplit
+            act = sessResize(act, paneCols(split, 0, cols, trows), paneRows(split, 0, cols, trows))     // shrink pane 0
+            let p1 = sessNew(paneCols(split, 1, cols, trows), paneRows(split, 1, cols, trows), shell, term)
+            act = envSet(act, "pane1", p1)
+            pfocus = 1  dirty = 1
+        }
+        if wantUnsplit == 1 && split != 0 {
+            if pfocus == 0 {                                       // close pane 0 -> promote pane 1
+                exec("kill -9 " + envGet(act, "pid") + " 2>/dev/null")  fdClose(envGet(act, "m"))
+                act = envGet(act, "pane1")
+            } else {                                               // close pane 1 -> keep pane 0
+                let p1 = envGet(act, "pane1")
+                exec("kill -9 " + envGet(p1, "pid") + " 2>/dev/null")  fdClose(envGet(p1, "m"))
+            }
+            split = 0  pfocus = 0
+            act = sessResize(act, cols, trows)                     // survivor fills the window
+            dirty = 1
+        }
+        act = envSet(act, "split", split)  act = envSet(act, "pfocus", pfocus)
         sessions = envSet(sessions, "" + active, act)
 
         // ── deferred tab ops ──
         if wantResize == 1 {
-            W = wantW  H = wantH  cols = (W - 8) / 8  rows = (H - 4) / 16  trows = rows - 1  if trows < 1 { trows = 1 }
+            W = wantW  H = wantH  cols = (W - 8) / 8  rows = (H - 4) / 16
+            trows = rows  if tabsOn == 1 { trows = rows - 1  if trows < 1 { trows = 1 } }
             let ti = 0
             while ti < tabCount {
-                let ts = envGet(sessions, "" + ti)  let tm = envGet(ts, "m")
-                ptySetSize(tm, trows, cols)
-                let ng = bufNew(5 * cols * trows)  let na2 = bufNew(cols * trows)  let nb2 = bufNew(cols * trows)  let nu2 = bufNew(cols * trows)
-                gridBlank(ng, na2, nb2, nu2, cols, trows)
-                ts = envSet(ts, "gb", ng)  ts = envSet(ts, "ab", na2)  ts = envSet(ts, "bb", nb2)  ts = envSet(ts, "ub", nu2)
-                ts = envSet(ts, "meta", gridInitMeta())  ts = envSet(ts, "hasSel", 0)  ts = envSet(ts, "selecting", 0)  ts = envSet(ts, "scrollOff", 0)
-                fdWrite(tm, fromCharCode(12), 1)
+                let ts = envGet(sessions, "" + ti)  let sp = envGet(ts, "split")
+                ts = sessResize(ts, paneCols(sp, 0, cols, trows), paneRows(sp, 0, cols, trows))
+                if sp != 0 { ts = envSet(ts, "pane1", sessResize(envGet(ts, "pane1"), paneCols(sp, 1, cols, trows), paneRows(sp, 1, cols, trows))) }
                 sessions = envSet(sessions, "" + ti, ts)
                 ti = ti + 1
             }
@@ -878,6 +939,10 @@ just run {
             let cs = envGet(sessions, "" + active)
             exec("kill -9 " + envGet(cs, "pid") + " 2>/dev/null")   // SIGKILL the shell
             fdClose(envGet(cs, "m"))
+            if envGet(cs, "split") != 0 {                           // split tab: kill the other pane too
+                let cp1 = envGet(cs, "pane1")
+                exec("kill -9 " + envGet(cp1, "pid") + " 2>/dev/null")  fdClose(envGet(cp1, "m"))
+            }
             if tabCount <= 1 { running = 0 }                        // last tab -> quit
             else {                                                  // splice the tab out + renumber (don't wait on the reap)
                 let ci = active
@@ -888,26 +953,49 @@ just run {
             }
         }
 
-        // ── pump every tab (background tabs keep running) ──
+        // ── pump every tab's pane(s) (background tabs + unfocused panes keep running) ──
         let anyDirty = 0
         let pi = 0
         while pi < tabCount {
-            let ps = sessPump(envGet(sessions, "" + pi), cols, trows, pal, sbCap, bellMode)
-            if envGet(ps, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
-            sessions = envSet(sessions, "" + pi, ps)
+            let ts = envGet(sessions, "" + pi)  let sp = envGet(ts, "split")
+            ts = sessPump(ts, paneCols(sp, 0, cols, trows), paneRows(sp, 0, cols, trows), pal, sbCap, bellMode)
+            if envGet(ts, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
+            if sp != 0 {
+                let p1 = sessPump(envGet(ts, "pane1"), paneCols(sp, 1, cols, trows), paneRows(sp, 1, cols, trows), pal, sbCap, bellMode)
+                if envGet(p1, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
+                ts = envSet(ts, "pane1", p1)
+            }
+            sessions = envSet(sessions, "" + pi, ts)
             pi = pi + 1
         }
 
-        // ── reap dead children + compact the session list ──
+        // ── reap dead children + compact. A pane whose shell exits collapses the
+        //    split (the survivor fills the window); a tab with no live pane drops. ──
         let newSess = envNew()  let nc = 0  let na3 = active
         let ck = 0
         while ck < tabCount {
-            let ks = envGet(sessions, "" + ck)
-            if waitChild(envGet(ks, "pid")) == 0 {
+            let ks = envGet(sessions, "" + ck)  let sp = envGet(ks, "split")
+            let drop = 0
+            if sp != 0 {
+                let p1 = envGet(ks, "pane1")
+                let dead0 = 0  if waitChild(envGet(ks, "pid")) != 0 { dead0 = 1 }
+                let dead1 = 0  if waitChild(envGet(p1, "pid")) != 0 { dead1 = 1 }
+                if dead0 == 1 && dead1 == 1 { fdClose(envGet(ks, "m"))  fdClose(envGet(p1, "m"))  drop = 1 }
+                else { if dead0 == 1 {                                  // pane 0 exited -> promote pane 1
+                    fdClose(envGet(ks, "m"))
+                    ks = sessResize(p1, cols, trows)  ks = envSet(ks, "split", 0)  ks = envSet(ks, "pfocus", 0)  dirty = 1
+                } else { if dead1 == 1 {                                // pane 1 exited -> keep pane 0
+                    fdClose(envGet(p1, "m"))
+                    ks = sessResize(ks, cols, trows)  ks = envSet(ks, "split", 0)  ks = envSet(ks, "pfocus", 0)  dirty = 1
+                } } }
+            } else {
+                if waitChild(envGet(ks, "pid")) != 0 { fdClose(envGet(ks, "m"))  drop = 1 }
+            }
+            if drop == 0 {
                 newSess = envSet(newSess, "" + nc, ks)
                 if ck == active { na3 = nc }
                 nc = nc + 1
-            } else { fdClose(envGet(ks, "m"))  if ck == active { na3 = nc } }
+            } else { if ck == active { na3 = nc } }
             ck = ck + 1
         }
         if nc == 0 { running = 0 }
@@ -917,11 +1005,13 @@ just run {
             if active >= tabCount { active = tabCount - 1 }  if active < 0 { active = 0 }
         }
 
-        // ── reload the active tab for rendering + push its title ──
+        // ── reload the active tab + focused pane for rendering + push its title ──
         act = envGet(sessions, "" + active)
-        gb = envGet(act, "gb")  ab = envGet(act, "ab")  bb = envGet(act, "bb")  ub = envGet(act, "ub")
-        meta = envGet(act, "meta")  scrollback = envGet(act, "scrollback")  bell = envGet(act, "bell")  scrollOff = envGet(act, "scrollOff")
-        selSR = envGet(act, "selSR")  selSC = envGet(act, "selSC")  selER = envGet(act, "selER")  selEC = envGet(act, "selEC")  hasSel = envGet(act, "hasSel")
+        split = envGet(act, "split")  pfocus = envGet(act, "pfocus")
+        fenv = act  if pfocus == 1 { fenv = envGet(act, "pane1") }
+        gb = envGet(fenv, "gb")  ab = envGet(fenv, "ab")  bb = envGet(fenv, "bb")  ub = envGet(fenv, "ub")
+        meta = envGet(fenv, "meta")  scrollback = envGet(fenv, "scrollback")  bell = envGet(fenv, "bell")  scrollOff = envGet(fenv, "scrollOff")
+        selSR = envGet(fenv, "selSR")  selSC = envGet(fenv, "selSC")  selER = envGet(fenv, "selER")  selEC = envGet(fenv, "selEC")  hasSel = envGet(fenv, "hasSel")
         let atitle = envGet(act, "title")
         if atitle != lastTitle { lastTitle = atitle  wlSetTitle(fd, TOP, atitle)  wlCommit(fd, SURF) }
 
@@ -943,8 +1033,29 @@ just run {
                 fbSz = sz
             }
             let px = fbPx
-            if scrollOff > 0 { kDrawScrollback(px, W, H, font, scrollback, gb, cols, trows, scrollOff, bg, fg, yBase) }
-            else { kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, trows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal, yBase) }
+            if split == 0 {
+                if scrollOff > 0 { kDrawScrollback(px, W, H, font, scrollback, gb, cols, trows, scrollOff, bg, fg, yBase, 0) }
+                else { kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, trows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal, yBase, 0, 1) }
+            } else {
+                fbClear(px, W, H, bg)                              // base fill, then composite both panes
+                let pr = 0
+                while pr < 2 {
+                    let penv = act  if pr == 1 { penv = envGet(act, "pane1") }
+                    let pc = paneCols(split, pr, cols, trows)  let prw = paneRows(split, pr, cols, trows)
+                    let pxb = paneCellX(split, pr, cols, trows) * 8
+                    let pyb = yBase + paneCellY(split, pr, cols, trows) * 16
+                    let foc = 0  if pr == pfocus { foc = 1 }
+                    let pgb = envGet(penv, "gb")  let pso = envGet(penv, "scrollOff")
+                    if foc == 1 && pso > 0 {
+                        kDrawScrollback(px, W, H, font, envGet(penv, "scrollback"), pgb, pc, prw, pso, bg, fg, pyb, pxb)
+                    } else {
+                        kDrawScreen(px, W, H, font, pgb, envGet(penv, "ab"), envGet(penv, "bb"), envGet(penv, "ub"), envGet(penv, "meta"), pc, prw, bg, fg, 0, curColor, curStyle, envGet(penv, "hasSel"), envGet(penv, "selSR"), envGet(penv, "selSC"), envGet(penv, "selER"), envGet(penv, "selEC"), pal, pyb, pxb, foc)
+                    }
+                    pr = pr + 1
+                }
+                if split == 1 { fbFillRect(px, W, paneCols(split, 0, cols, trows) * 8 + 6, yBase, 4, trows * 16, 2967603) }            // | gutter
+                if split == 2 { fbFillRect(px, W, 0, yBase + paneRows(split, 0, cols, trows) * 16 + 6, cols * 8 + 8, 4, 2967603) }     // - gutter
+            }
             if tabsOn == 1 { kDrawTabBar(px, W, H, font, sessions, tabCount, active) }
             let didFlash = bell  bell = 0
             act = envSet(act, "bell", 0)  sessions = envSet(sessions, "" + active, act)   // consume the flash
@@ -970,6 +1081,10 @@ just run {
         let qs = envGet(sessions, "" + qi)
         exec("kill -9 " + envGet(qs, "pid") + " 2>/dev/null")   // fish ignores PTY-hangup SIGHUP -> kill explicitly
         fdClose(envGet(qs, "m"))
+        if envGet(qs, "split") != 0 {
+            let qp1 = envGet(qs, "pane1")
+            exec("kill -9 " + envGet(qp1, "pid") + " 2>/dev/null")  fdClose(envGet(qp1, "m"))
+        }
         qi = qi + 1
     }
     sockClose(fd)

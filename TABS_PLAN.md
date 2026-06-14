@@ -42,7 +42,27 @@ Main branch = stable, VT-complete single pane.
    segment per tab (number + truncated title), active highlighted (reuse
    fbFillRect + stemDrawChar). Bell flash + scrollback view stay per active tab.
 
-## Splits (phase 2, after tabs)
+## Splits — DONE (MVP, 2-pane) + Hyprland-on
+
+Landed: 2-way split per tab. `Ctrl-Shift-D` vertical |, `Ctrl-Shift-E` horizontal -,
+`Ctrl-Shift-O` switch pane, `Ctrl-Shift-X` close pane (collapse). Each pane = an
+independent PTY/session (pane0 = the tab env's own m/gb/.., pane1 = nested "pane1"
+sub-env). Both panes pumped every frame; focused pane gets keyboard + bright cursor,
+unfocused gets a hollow cursor. Gutter line between. Window resize + pane-exit
+(`exit` in a pane) collapse the split (survivor fills the window). Splits stay ON
+under Hyprland (subdivide one window). `paneCols/paneRows/paneCellX/paneCellY`
+compute geometry; `sessResize` reallocs a pane. `kDrawScreen`/`kDrawScrollback`
+gained `xBase`+`focused` and rect-clear so panes composite.
+
+KNOWN ISSUE: heavy wrapping prompts (starship) STACK on redraw in narrow panes —
+command output is clean, only the prompt duplicates. Root cause: no deferred/
+pending-wrap (xterm last-column delayed wrap). fish computes wrapped-prompt cursor
+"up N rows" assuming delayed wrap; our eager wrap drifts the count. FIX NEXT in
+term.k: add a pending-wrap flag (set when a glyph lands in the last column; the
+actual line advance happens on the NEXT printable, not immediately). Helps general
+fidelity, not just splits.
+
+## (original splits plan, kept for the recursive >2-pane future)
 - A layout tree (binary h/v split nodes; leaves = sessions). Each leaf gets a
   sub-rectangle (x,y,wcols,hrows). gridFeedB/kDrawScreen already take cols/rows,
   but render needs an (x,y) cell offset + per-pane size → add px/py offset args
