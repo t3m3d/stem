@@ -922,7 +922,7 @@ func oscTitle(s, old) {
 func gridCursor(state, cols, rows) {
     let total = cols * rows
     let tailFull = substring(state, 7 * total + 1, len(state))
-    let tail = substring(tailFull, 0, indexOf(tailFull, fromCharCode(1)))
+    let tail = _mtail(tailFull)
     if _cf(tail, 13) == 0 { emit "9999,0" }      // cursor hidden (DECSET 25 off)
     emit _cf(tail, 0) + "," + _cf(tail, 1)
 }
@@ -932,7 +932,7 @@ func gridCursor(state, cols, rows) {
 func gridCshape(state, cols, rows) {
     let total = cols * rows
     let tailFull = substring(state, 7 * total + 1, len(state))
-    let tail = substring(tailFull, 0, indexOf(tailFull, fromCharCode(1)))
+    let tail = _mtail(tailFull)
     emit _cf(tail, 14)
 }
 
@@ -951,7 +951,7 @@ func gridMouse(state, cols, rows) {
 func gridShape(state, cols, rows) {
     let total = cols * rows
     let tailFull = substring(state, 7 * total + 1, len(state))
-    let tail = substring(tailFull, 0, indexOf(tailFull, fromCharCode(1)))
+    let tail = _mtail(tailFull)
     emit _cf(tail, 14)
 }
 
@@ -959,7 +959,7 @@ func gridShape(state, cols, rows) {
 func gridPaste(state, cols, rows) {
     let total = cols * rows
     let tailFull = substring(state, 7 * total + 1, len(state))
-    let tail = substring(tailFull, 0, indexOf(tailFull, fromCharCode(1)))
+    let tail = _mtail(tailFull)
     emit _cf(tail, 15)
 }
 
@@ -967,7 +967,7 @@ func gridPaste(state, cols, rows) {
 func gridAlt(state, cols, rows) {
     let total = cols * rows
     let tailFull = substring(state, 7 * total + 1, len(state))
-    let tail = substring(tailFull, 0, indexOf(tailFull, fromCharCode(1)))
+    let tail = _mtail(tailFull)
     emit _cf(tail, 10)
 }
 
@@ -975,7 +975,7 @@ func gridAlt(state, cols, rows) {
 func gridFocus(state, cols, rows) {
     let total = cols * rows
     let tailFull = substring(state, 7 * total + 1, len(state))
-    let tail = substring(tailFull, 0, indexOf(tailFull, fromCharCode(1)))
+    let tail = _mtail(tailFull)
     emit _cf(tail, 16)
 }
 
@@ -1002,22 +1002,30 @@ func gridScrolled(state, cols, rows) {
 }
 
 // ── meta-direct readers (stem holds the small meta string; no planes) ─────────
+// _mtail: the comma-field tail of meta, up to the first 0x01 separator. Guards a
+// missing separator (empty/malformed meta) — substring(s,0,-1) would SEGFAULT, so
+// a bad meta must not reach these readers via a crash. Returns "" -> _cf gives 0.
+func _mtail(meta) {
+    let p = indexOf(meta, fromCharCode(1))
+    if p < 0 { emit "" }
+    emit substring(meta, 0, p)
+}
 func gridCursorM(meta) {
-    let tail = substring(meta, 0, indexOf(meta, fromCharCode(1)))
+    let tail = _mtail(meta)
     if _cf(tail, 13) == 0 { emit "9999,0" }                      // cursor hidden (DECSET 25)
     emit _cf(tail, 0) + "," + _cf(tail, 1)
 }
 func gridCshapeM(meta) {
-    emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 14)
+    emit _cf(_mtail(meta), 14)
 }
 func gridBellM(meta) {
-    emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 7)
+    emit _cf(_mtail(meta), 7)
 }
 func gridPasteM(meta) {                  // 1 if bracketed paste (DECSET 2004) is on
-    emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 15)
+    emit _cf(_mtail(meta), 15)
 }
 func gridMouseM(meta) {                  // "mlevel,msgr": app mouse tracking + SGR(1006) flag
-    let tail = substring(meta, 0, indexOf(meta, fromCharCode(1)))
+    let tail = _mtail(meta)
     emit _cf(tail, 8) + "," + _cf(tail, 9)
 }
 func gridScrolledM(meta) {

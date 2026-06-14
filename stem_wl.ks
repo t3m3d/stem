@@ -748,7 +748,8 @@ just run {
         fcellX = paneCellX(split, pfocus, cols, trows)  fcellY = paneCellY(split, pfocus, cols, trows)
         m = envGet(fenv, "m")
         gb = envGet(fenv, "gb")  ab = envGet(fenv, "ab")  bb = envGet(fenv, "bb")  ub = envGet(fenv, "ub")
-        meta = envGet(fenv, "meta")  bell = envGet(fenv, "bell")
+        meta = envGet(fenv, "meta")  if indexOf(meta, fromCharCode(1)) < 0 { meta = gridInitMeta() }   // never feed a malformed meta to the parsers
+        bell = envGet(fenv, "bell")
         scrollOff = envGet(fenv, "scrollOff")
         scrollback = ""  if scrollOff > 0 { scrollback = envGet(sbStore, "" + m) }   // big string: load only while viewing history
         selecting = envGet(fenv, "selecting")  hasSel = envGet(fenv, "hasSel")
@@ -777,6 +778,13 @@ just run {
                     ctrl = 0   if bitAnd(mods, 4) != 0 { ctrl = 1 }    // bit2 = ctrl
                     alt = 0    if bitAnd(mods, 8) != 0 { alt = 1 }     // bit3 = mod1 (Alt/Meta)
                 }
+                // keyboard focus LEFT: clear modifier state. The key-releases for
+                // ctrl/shift happen while we're unfocused, so without this they stay
+                // "held" and the next keypress on return fires a phantom Ctrl-Shift-*
+                // binding (e.g. an accidental split). Same for any held mouse button.
+                if obj == KB && op == 1 { shift = 0  ctrl = 0  alt = 0 }   // wl_keyboard.enter: start from clean mods
+                if obj == KB && op == 2 { shift = 0  ctrl = 0  alt = 0 }   // wl_keyboard.leave: drop held mods
+                if obj == PTR && op == 1 { heldBtn = 0 - 1 }   // wl_pointer.leave -> drop drag state
                 if obj == KB && op == 3 {                    // wl_keyboard.key
                     let state = wlU32(eb, off + 20)
                     let kc = wlKeyToKc(wlU32(eb, off + 16))
@@ -931,7 +939,12 @@ just run {
 
             // split ops (operate on the active tab)
             if togFocus == 1 && split != 0 { pfocus = 1 - pfocus  dirty = 1 }
-            if wantSplit != 0 && split == 0 {
+            // refuse a split that would make either pane degenerate (0-size buffers
+            // corrupt the grid). Vertical needs width, horizontal needs height.
+            let canSplit = 0
+            if wantSplit == 1 && paneCols(1, 1, cols, trows) >= 8 { canSplit = 1 }
+            if wantSplit == 2 && paneRows(2, 1, cols, trows) >= 3 { canSplit = 1 }
+            if wantSplit != 0 && split == 0 && canSplit == 1 {
                 split = wantSplit
                 act = sessResize(act, paneCols(split, 0, cols, trows), paneRows(split, 0, cols, trows))     // shrink pane 0
                 let p1 = sessNew(paneCols(split, 1, cols, trows), paneRows(split, 1, cols, trows), shell, term)
@@ -1065,7 +1078,8 @@ just run {
         split = envGet(act, "split")  pfocus = envGet(act, "pfocus")
         fenv = act  if pfocus == 1 { fenv = envGet(act, "pane1") }
         gb = envGet(fenv, "gb")  ab = envGet(fenv, "ab")  bb = envGet(fenv, "bb")  ub = envGet(fenv, "ub")
-        meta = envGet(fenv, "meta")  bell = envGet(fenv, "bell")  scrollOff = envGet(fenv, "scrollOff")
+        meta = envGet(fenv, "meta")  if indexOf(meta, fromCharCode(1)) < 0 { meta = gridInitMeta() }
+        bell = envGet(fenv, "bell")  scrollOff = envGet(fenv, "scrollOff")
         scrollback = ""  if scrollOff > 0 { scrollback = envGet(sbStore, "" + envGet(fenv, "m")) }
         selSR = envGet(fenv, "selSR")  selSC = envGet(fenv, "selSC")  selER = envGet(fenv, "selER")  selEC = envGet(fenv, "selEC")  hasSel = envGet(fenv, "hasSel")
         let atitle = envGet(act, "title")
