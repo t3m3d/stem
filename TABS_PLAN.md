@@ -1,6 +1,9 @@
 # stem tabs + splits — implementation plan
 
-Status: **foundation landed on branch `tabs`** (session model validated).
+Status: **TABS DONE + verified on branch `tabs`** (commit 396860e). Open
+(Ctrl-Shift-T) / close (Ctrl-Shift-W) / cycle (Ctrl-PgUp/Dn) / jump (Alt-1..9)
+all screenshot-tested: tab bar renders, per-tab state isolates, input routes to
+the active tab, close removes the tab + kills its shell. **Splits = phase 2, next.**
 Main branch = stable, VT-complete single pane.
 
 ## What's done (branch `tabs`)

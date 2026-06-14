@@ -616,6 +616,13 @@ just run {
     if curStyleS == "underline" { curStyle = 2 }
     let bellMode = confGet(conf, "bell", "visual")             // visual | off
 
+    // On Hyprland (a tiling WM), in-terminal tabs are redundant — the compositor
+    // already tiles + groups windows. So gate the tab bar + tab keybinds off there
+    // and give the whole window to the grid. Splits stay on (useful: subdivide one
+    // window without spawning more). Detect via Hyprland's instance signature.
+    let tabsOn = 1
+    if exec("printenv HYPRLAND_INSTANCE_SIGNATURE 2>/dev/null") != "" { tabsOn = 0 }
+
     // initial size from config grid (a tiling compositor may override on map).
     let cfgCols = confGetInt(conf, "cols", 100)
     let cfgRows = confGetInt(conf, "rows", 30)
@@ -626,7 +633,8 @@ just run {
     let rows = (H - 4) / 16
 
     // reserve the top cell-row for the tab bar -> terminal grid is `trows` tall.
-    let trows = rows - 1  if trows < 1 { trows = 1 }
+    let trows = rows                                  // tab bar reserves row 0 only when tabs are on
+    if tabsOn == 1 { trows = rows - 1  if trows < 1 { trows = 1 } }
     // ── session 0 created BEFORE wlConnect so the forked shell doesn't inherit
     // the wayland fd (which would keep orphan windows alive). sessNew forks the
     // PTY (TERM wrapper), allocs+blanks the planes, returns a session env. ──
@@ -669,6 +677,7 @@ just run {
     let fbMem = 0  let fbPx = 0  let fbPool = 0  let fbSz = 0   // shared framebuffer, reused across frames
     let switchTo = 0 - 1  let wantNew = 0  let wantClose = 0     // deferred tab ops (applied after events)
     let wantResize = 0  let wantW = 0  let wantH = 0
+    let yBase = 2  if tabsOn == 1 { yBase = 18 }                 // grid top: below the tab bar, or flush when no bar
     while running == 1 {
         switchTo = 0 - 1  wantNew = 0  wantClose = 0  wantResize = 0   // reset deferred ops each frame
         // load the ACTIVE tab's per-session state into working locals for this frame
@@ -708,12 +717,15 @@ just run {
                     let kc = wlKeyToKc(wlU32(eb, off + 16))
                     if state == 1 {
                         // ── tab management (handled here, never sent to the shell) ──
+                        // disabled under Hyprland (tabsOn=0): the WM tiles windows already.
                         let tabKey = 0
-                        if ctrl == 1 && shift == 1 && kc == 28 { wantNew = 1  tabKey = 1 }        // Ctrl-Shift-T new
-                        if ctrl == 1 && shift == 1 && kc == 25 { wantClose = 1  tabKey = 1 }      // Ctrl-Shift-W close
-                        if ctrl == 1 && shift == 0 && kc == 112 { switchTo = active - 1  tabKey = 1 }  // Ctrl-PgUp prev
-                        if ctrl == 1 && shift == 0 && kc == 117 { switchTo = active + 1  tabKey = 1 }  // Ctrl-PgDn next
-                        if alt == 1 && kc >= 10 && kc <= 18 { switchTo = kc - 10  tabKey = 1 }    // Alt-1..9 jump
+                        if tabsOn == 1 {
+                            if ctrl == 1 && shift == 1 && kc == 28 { wantNew = 1  tabKey = 1 }        // Ctrl-Shift-T new
+                            if ctrl == 1 && shift == 1 && kc == 25 { wantClose = 1  tabKey = 1 }      // Ctrl-Shift-W close
+                            if ctrl == 1 && shift == 0 && kc == 112 { switchTo = active - 1  tabKey = 1 }  // Ctrl-PgUp prev
+                            if ctrl == 1 && shift == 0 && kc == 117 { switchTo = active + 1  tabKey = 1 }  // Ctrl-PgDn next
+                            if alt == 1 && kc >= 10 && kc <= 18 { switchTo = kc - 10  tabKey = 1 }    // Alt-1..9 jump
+                        }
                         if tabKey == 0 {
                         if hasSel == 1 { hasSel = 0  dirty = 1 }     // typing clears the selection
                         // Shift+PageUp/Down scrolls the scrollback (not sent to shell).
@@ -749,7 +761,7 @@ just run {
                     let px = toInt(wlU32(eb, off + 12)) / 256   // wl_fixed -> px
                     let py = toInt(wlU32(eb, off + 16)) / 256
                     let nC = (px - 4) / 8    if nC < 0 { nC = 0 }  if nC >= cols { nC = cols - 1 }
-                    let nR = (py - 18) / 16  if nR < 0 { nR = 0 }  if nR >= trows { nR = trows - 1 }   // -18: below tab bar
+                    let nR = (py - yBase) / 16  if nR < 0 { nR = 0 }  if nR >= trows { nR = trows - 1 }   // below the tab bar
                     let moved = 0  if nC != ptrC || nR != ptrR { moved = 1 }
                     ptrC = nC  ptrR = nR
                     if selecting == 1 { selER = ptrR  selEC = ptrC  hasSel = 1  dirty = 1 }
@@ -931,9 +943,9 @@ just run {
                 fbSz = sz
             }
             let px = fbPx
-            if scrollOff > 0 { kDrawScrollback(px, W, H, font, scrollback, gb, cols, trows, scrollOff, bg, fg, 18) }
-            else { kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, trows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal, 18) }
-            kDrawTabBar(px, W, H, font, sessions, tabCount, active)
+            if scrollOff > 0 { kDrawScrollback(px, W, H, font, scrollback, gb, cols, trows, scrollOff, bg, fg, yBase) }
+            else { kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, trows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal, yBase) }
+            if tabsOn == 1 { kDrawTabBar(px, W, H, font, sessions, tabCount, active) }
             let didFlash = bell  bell = 0
             act = envSet(act, "bell", 0)  sessions = envSet(sessions, "" + active, act)   // consume the flash
             let buf = nextId  nextId = nextId + 1
