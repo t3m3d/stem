@@ -558,10 +558,10 @@ func sessNew(cols, rows, shell, term) {
     let s = envNew()
     s = envSet(s, "m", m)        s = envSet(s, "pid", pid)
     s = envSet(s, "gb", gb)      s = envSet(s, "ab", ab)      s = envSet(s, "bb", bb)      s = envSet(s, "ub", ub)
-    s = envSet(s, "meta", gridInitMeta())  s = envSet(s, "sb", "")  s = envSet(s, "pending", "")  s = envSet(s, "title", "stem")
-    s = envSet(s, "scrollOff", 0)  s = envSet(s, "bell", 0)  s = envSet(s, "quiet", 0)
+    s = envSet(s, "meta", gridInitMeta())  s = envSet(s, "scrolledOut", "")  s = envSet(s, "pending", "")  s = envSet(s, "title", "stem")
+    s = envSet(s, "scrollOff", 0)  s = envSet(s, "bell", 0)  s = envSet(s, "quiet", 0)  s = envSet(s, "ch", 1)
     s = envSet(s, "kicked", 0)  s = envSet(s, "kickIn", 30)  s = envSet(s, "kickArmed", 1)
-    s = envSet(s, "scrollback", "")  s = envSet(s, "selecting", 0)  s = envSet(s, "hasSel", 0)
+    s = envSet(s, "selecting", 0)  s = envSet(s, "hasSel", 0)
     s = envSet(s, "selSR", 0)  s = envSet(s, "selSC", 0)  s = envSet(s, "selER", 0)  s = envSet(s, "selEC", 0)
     s = envSet(s, "split", 0)  s = envSet(s, "pfocus", 0)   // splits: 0=single pane, focus pane 0
     emit s
@@ -581,22 +581,40 @@ func sessResize(s, pcols, prows) {
     emit s
 }
 
+// append scrolled-off lines to a session's scrollback (kept in sbStore, keyed by
+// fd, so it stays out of the per-frame session env). Caps to ~sbCap lines.
+func sbPush(store, key, add, sbCap) {
+    let cur = envGet(store, key) + add
+    let cap = sbCap * 200
+    if len(cur) > cap { cur = substring(cur, len(cur) - cap, len(cur)) }
+    emit envSet(store, key, cur)
+}
+
 // drain one session's PTY, feed its grid buffers (in place), update its env. Sets
 // the "dirty" field to 1 if the session's screen changed this pump. Returns the
 // updated session env. Same logic for foreground + background tabs.
+// NB no-GC bump allocator: each envGet/envSet of a session DEEP-COPIES its values,
+// so scrollback (up to ~400KB) is kept OUT of this env (in the loop's sbStore,
+// keyed by fd) — here we only EMIT this frame's scrolled-off lines via "scrolledOut".
+// And we only write the env back when something actually changed ("ch"=1); idle
+// panes touch nothing (quiet caps), so the heap doesn't bleed every frame.
 func sessPump(s, cols, rows, pal, sbCap, bellMode) {
     let m = envGet(s, "m")
     let gb = envGet(s, "gb")  let ab = envGet(s, "ab")  let bb = envGet(s, "bb")  let ub = envGet(s, "ub")
-    let meta = envGet(s, "meta")  let pending = envGet(s, "pending")  let sb = envGet(s, "scrollback")
+    let meta = envGet(s, "meta")  let pending = envGet(s, "pending")
     let title = envGet(s, "title")  let bell = envGet(s, "bell")  let quiet = envGet(s, "quiet")
     let kicked = envGet(s, "kicked")  let kickIn = envGet(s, "kickIn")  let kickArmed = envGet(s, "kickArmed")
-    let dirty = 0
+    let dirty = 0  let touched = 0  let scOut = ""
     if kickArmed == 1 && kickIn > 0 {
-        kickIn = kickIn - 1
+        kickIn = kickIn - 1  touched = 1
         if kickIn == 0 { fdWrite(m, fromCharCode(12), 1)  kicked = 1  kickArmed = 0  dirty = 1 }
     }
-    let out = fdRead(m, 16384)
+    // fdRead allocs its buffer every call (no-GC bump heap), so an idle pane reading
+    // 16K/frame burns the heap fast. Peek small; only drain big when data is present.
+    let out = fdRead(m, 256)
+    if len(out) >= 256 { out = out + fdRead(m, 65536) }   // burst -> pull the rest
     if len(out) > 0 {
+        touched = 1
         if kickArmed == 1 { kickIn = 30 }
         let chunk = pending + out
         let nt = oscTitle(chunk, title)
@@ -609,24 +627,22 @@ func sessPump(s, cols, rows, pal, sbCap, bellMode) {
             let rep = termReplies(fed, meta, cols, rows)
             if len(rep) > 0 { fdWrite(m, rep, len(rep)) }
             if gridBellM(meta) == 1 { if bellMode == "visual" { bell = 1 } }
-            let sc = gridScrolledM(meta)
-            if len(sc) > 0 {
-                sb = sb + sc
-                let cap = sbCap * 200
-                if len(sb) > cap { sb = substring(sb, len(sb) - cap, len(sb)) }
-            }
+            scOut = gridScrolledM(meta)              // lines that scrolled off this frame (caller appends to sbStore)
             dirty = 1
         }
         pending = substring(chunk, cut, len(chunk))
         quiet = 0
     } else {
-        quiet = quiet + 1
-        if quiet >= 2 && len(pending) > 0 { meta = gridFeedB(gb, ab, bb, ub, meta, pending, cols, rows)  pending = ""  dirty = 1 }
+        if quiet < 4 { quiet = quiet + 1  touched = 1 }   // cap: a fully idle pane stops mutating -> no env churn
+        if quiet >= 2 && len(pending) > 0 { meta = gridFeedB(gb, ab, bb, ub, meta, pending, cols, rows)  pending = ""  dirty = 1  touched = 1 }
     }
-    s = envSet(s, "meta", meta)  s = envSet(s, "pending", pending)  s = envSet(s, "scrollback", sb)
-    s = envSet(s, "title", title)  s = envSet(s, "bell", bell)  s = envSet(s, "quiet", quiet)
-    s = envSet(s, "kicked", kicked)  s = envSet(s, "kickIn", kickIn)  s = envSet(s, "kickArmed", kickArmed)
-    s = envSet(s, "dirty", dirty)
+    if touched == 1 {
+        s = envSet(s, "meta", meta)  s = envSet(s, "pending", pending)  s = envSet(s, "scrolledOut", scOut)
+        s = envSet(s, "title", title)  s = envSet(s, "bell", bell)  s = envSet(s, "quiet", quiet)
+        s = envSet(s, "kicked", kicked)  s = envSet(s, "kickIn", kickIn)  s = envSet(s, "kickArmed", kickArmed)
+        s = envSet(s, "dirty", dirty)
+    }
+    s = envSet(s, "ch", touched)
     emit s
 }
 
@@ -707,24 +723,38 @@ just run {
     let wantResize = 0  let wantW = 0  let wantH = 0
     let wantSplit = 0  let wantUnsplit = 0  let togFocus = 0       // deferred split ops
     let yBase = 2  if tabsOn == 1 { yBase = 18 }                 // grid top: below the tab bar, or flush when no bar
+    let sbStore = envNew()       // scrollback history per session (keyed by fd) — kept OUT of the per-frame session env
+    // working locals hoisted: only RE-loaded on frames with wayland input (en>0).
+    // Idle frames skip the active-session deep copy entirely (no-GC heap saver).
+    let act = sessions  let split = 0  let pfocus = 0  let fenv = sessions
+    let fcols = cols  let frows = trows  let fcellX = 0  let fcellY = 0
+    let m = 0  let gb = 0  let ab = 0  let bb = 0  let ub = 0
+    let meta = ""  let bell = 0  let scrollOff = 0  let scrollback = ""
+    let selecting = 0  let hasSel = 0  let selSR = 0  let selSC = 0  let selER = 0  let selEC = 0
+    let scrollOff0 = 0  let hasSel0 = 0  let selecting0 = 0  let bell0 = 0
+    let selSR0 = 0  let selSC0 = 0  let selER0 = 0  let selEC0 = 0
     while running == 1 {
         switchTo = 0 - 1  wantNew = 0  wantClose = 0  wantResize = 0   // reset deferred ops each frame
         wantSplit = 0  wantUnsplit = 0  togFocus = 0
-        // load the ACTIVE tab + its FOCUSED pane into working locals for this frame.
-        // pane 0 = the tab env's own m/gb/.. ; pane 1 = the nested "pane1" sub-env.
-        let act = envGet(sessions, "" + active)
-        let split = envGet(act, "split")  let pfocus = envGet(act, "pfocus")
-        let fenv = act  if pfocus == 1 { fenv = envGet(act, "pane1") }
-        let fcols = paneCols(split, pfocus, cols, trows)  let frows = paneRows(split, pfocus, cols, trows)
-        let fcellX = paneCellX(split, pfocus, cols, trows)  let fcellY = paneCellY(split, pfocus, cols, trows)
-        let m = envGet(fenv, "m")
-        let gb = envGet(fenv, "gb")  let ab = envGet(fenv, "ab")  let bb = envGet(fenv, "bb")  let ub = envGet(fenv, "ub")
-        let meta = envGet(fenv, "meta")  let scrollback = envGet(fenv, "scrollback")  let bell = envGet(fenv, "bell")
-        let scrollOff = envGet(fenv, "scrollOff")
-        let selecting = envGet(fenv, "selecting")  let hasSel = envGet(fenv, "hasSel")
-        let selSR = envGet(fenv, "selSR")  let selSC = envGet(fenv, "selSC")  let selER = envGet(fenv, "selER")  let selEC = envGet(fenv, "selEC")
         // 1) drain wayland events (non-blocking)
         let en = wlRecvInto(fd, eb, 8192)
+        if en > 0 {
+        // load the ACTIVE tab + its FOCUSED pane into working locals (only when there's
+        // input to handle). pane 0 = the tab env's own m/gb/.. ; pane 1 = nested "pane1".
+        act = envGet(sessions, "" + active)
+        split = envGet(act, "split")  pfocus = envGet(act, "pfocus")
+        fenv = act  if pfocus == 1 { fenv = envGet(act, "pane1") }
+        fcols = paneCols(split, pfocus, cols, trows)  frows = paneRows(split, pfocus, cols, trows)
+        fcellX = paneCellX(split, pfocus, cols, trows)  fcellY = paneCellY(split, pfocus, cols, trows)
+        m = envGet(fenv, "m")
+        gb = envGet(fenv, "gb")  ab = envGet(fenv, "ab")  bb = envGet(fenv, "bb")  ub = envGet(fenv, "ub")
+        meta = envGet(fenv, "meta")  bell = envGet(fenv, "bell")
+        scrollOff = envGet(fenv, "scrollOff")
+        scrollback = ""  if scrollOff > 0 { scrollback = envGet(sbStore, "" + m) }   // big string: load only while viewing history
+        selecting = envGet(fenv, "selecting")  hasSel = envGet(fenv, "hasSel")
+        selSR = envGet(fenv, "selSR")  selSC = envGet(fenv, "selSC")  selER = envGet(fenv, "selER")  selEC = envGet(fenv, "selEC")
+        scrollOff0 = scrollOff  hasSel0 = hasSel  selecting0 = selecting  bell0 = bell   // baseline for change detection
+        selSR0 = selSR  selSC0 = selSC  selER0 = selER  selEC0 = selEC
         let off = 0
         while off + 8 <= en {
             let obj = wlObject(eb, off)  let op = wlOpcode(eb, off)  let s = wlSize(eb, off)
@@ -770,6 +800,7 @@ just run {
                         if hasSel == 1 { hasSel = 0  dirty = 1 }     // typing clears the selection
                         // Shift+PageUp/Down scrolls the scrollback (not sent to shell).
                         if shift == 1 && kc == 112 {
+                            if scrollOff == 0 { scrollback = envGet(sbStore, "" + m) }   // entering history: pull it in
                             scrollOff = scrollOff + frows - 2
                             let maxOff = toInt(lineCount(scrollback))
                             if scrollOff > maxOff { scrollOff = maxOff }
@@ -868,6 +899,7 @@ just run {
                             fdWrite(m, seq, len(seq))
                         } else {
                             if msb >= 128 {                  // up -> into history
+                                if scrollOff == 0 { scrollback = envGet(sbStore, "" + m) }
                                 scrollOff = scrollOff + 3
                                 let maxOff = toInt(lineCount(scrollback))
                                 if scrollOff > maxOff { scrollOff = maxOff }
@@ -883,35 +915,45 @@ just run {
                 off = off + s
             }
         }
-        // ── save the focused pane's input-modified state back into its env ──
-        fenv = envSet(fenv, "scrollOff", scrollOff)  fenv = envSet(fenv, "selecting", selecting)  fenv = envSet(fenv, "hasSel", hasSel)
-        fenv = envSet(fenv, "selSR", selSR)  fenv = envSet(fenv, "selSC", selSC)  fenv = envSet(fenv, "selER", selER)  fenv = envSet(fenv, "selEC", selEC)
-        fenv = envSet(fenv, "bell", bell)
-        if pfocus == 1 { act = envSet(act, "pane1", fenv) } else { act = fenv }
+        // Only write the focused pane back when input actually changed it, or a
+        // split op fired — a no-GC heap can't afford a full session deep-copy/frame.
+        let fdirty = 0
+        if scrollOff != scrollOff0 || hasSel != hasSel0 || selecting != selecting0 || bell != bell0 { fdirty = 1 }
+        if selSR != selSR0 || selSC != selSC0 || selER != selER0 || selEC != selEC0 { fdirty = 1 }
+        let splitOp = 0
+        if togFocus == 1 || wantSplit != 0 || wantUnsplit == 1 { splitOp = 1 }
+        if fdirty == 1 || splitOp == 1 {
+            // save the focused pane's input-modified state back into its env
+            fenv = envSet(fenv, "scrollOff", scrollOff)  fenv = envSet(fenv, "selecting", selecting)  fenv = envSet(fenv, "hasSel", hasSel)
+            fenv = envSet(fenv, "selSR", selSR)  fenv = envSet(fenv, "selSC", selSC)  fenv = envSet(fenv, "selER", selER)  fenv = envSet(fenv, "selEC", selEC)
+            fenv = envSet(fenv, "bell", bell)
+            if pfocus == 1 { act = envSet(act, "pane1", fenv) } else { act = fenv }
 
-        // ── split ops (operate on the active tab) ──
-        if togFocus == 1 && split != 0 { pfocus = 1 - pfocus  dirty = 1 }
-        if wantSplit != 0 && split == 0 {
-            split = wantSplit
-            act = sessResize(act, paneCols(split, 0, cols, trows), paneRows(split, 0, cols, trows))     // shrink pane 0
-            let p1 = sessNew(paneCols(split, 1, cols, trows), paneRows(split, 1, cols, trows), shell, term)
-            act = envSet(act, "pane1", p1)
-            pfocus = 1  dirty = 1
-        }
-        if wantUnsplit == 1 && split != 0 {
-            if pfocus == 0 {                                       // close pane 0 -> promote pane 1
-                exec("kill -9 " + envGet(act, "pid") + " 2>/dev/null")  fdClose(envGet(act, "m"))
-                act = envGet(act, "pane1")
-            } else {                                               // close pane 1 -> keep pane 0
-                let p1 = envGet(act, "pane1")
-                exec("kill -9 " + envGet(p1, "pid") + " 2>/dev/null")  fdClose(envGet(p1, "m"))
+            // split ops (operate on the active tab)
+            if togFocus == 1 && split != 0 { pfocus = 1 - pfocus  dirty = 1 }
+            if wantSplit != 0 && split == 0 {
+                split = wantSplit
+                act = sessResize(act, paneCols(split, 0, cols, trows), paneRows(split, 0, cols, trows))     // shrink pane 0
+                let p1 = sessNew(paneCols(split, 1, cols, trows), paneRows(split, 1, cols, trows), shell, term)
+                act = envSet(act, "pane1", p1)
+                pfocus = 1  dirty = 1
             }
-            split = 0  pfocus = 0
-            act = sessResize(act, cols, trows)                     // survivor fills the window
-            dirty = 1
+            if wantUnsplit == 1 && split != 0 {
+                if pfocus == 0 {                                       // close pane 0 -> promote pane 1
+                    exec("kill -9 " + envGet(act, "pid") + " 2>/dev/null")  fdClose(envGet(act, "m"))
+                    act = envGet(act, "pane1")
+                } else {                                               // close pane 1 -> keep pane 0
+                    let p1 = envGet(act, "pane1")
+                    exec("kill -9 " + envGet(p1, "pid") + " 2>/dev/null")  fdClose(envGet(p1, "m"))
+                }
+                split = 0  pfocus = 0
+                act = sessResize(act, cols, trows)                     // survivor fills the window
+                dirty = 1
+            }
+            act = envSet(act, "split", split)  act = envSet(act, "pfocus", pfocus)
+            sessions = envSet(sessions, "" + active, act)
         }
-        act = envSet(act, "split", split)  act = envSet(act, "pfocus", pfocus)
-        sessions = envSet(sessions, "" + active, act)
+        }   // end if en > 0  (input handling)
 
         // ── deferred tab ops ──
         if wantResize == 1 {
@@ -954,18 +996,29 @@ just run {
         }
 
         // ── pump every tab's pane(s) (background tabs + unfocused panes keep running) ──
+        // Only re-store a session when its pump touched it (ch==1); otherwise the
+        // deep-copy back into `sessions` every frame would bleed the no-GC heap.
         let anyDirty = 0
         let pi = 0
         while pi < tabCount {
             let ts = envGet(sessions, "" + pi)  let sp = envGet(ts, "split")
             ts = sessPump(ts, paneCols(sp, 0, cols, trows), paneRows(sp, 0, cols, trows), pal, sbCap, bellMode)
-            if envGet(ts, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
+            let changed = envGet(ts, "ch")
+            if changed == 1 {
+                if envGet(ts, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
+                let so0 = envGet(ts, "scrolledOut")
+                if len(so0) > 0 { sbStore = sbPush(sbStore, "" + envGet(ts, "m"), so0, sbCap) }
+            }
             if sp != 0 {
                 let p1 = sessPump(envGet(ts, "pane1"), paneCols(sp, 1, cols, trows), paneRows(sp, 1, cols, trows), pal, sbCap, bellMode)
-                if envGet(p1, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
-                ts = envSet(ts, "pane1", p1)
+                if envGet(p1, "ch") == 1 {
+                    if envGet(p1, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
+                    let so1 = envGet(p1, "scrolledOut")
+                    if len(so1) > 0 { sbStore = sbPush(sbStore, "" + envGet(p1, "m"), so1, sbCap) }
+                    ts = envSet(ts, "pane1", p1)  changed = 1
+                }
             }
-            sessions = envSet(sessions, "" + pi, ts)
+            if changed == 1 { sessions = envSet(sessions, "" + pi, ts) }
             pi = pi + 1
         }
 
@@ -1005,12 +1058,15 @@ just run {
             if active >= tabCount { active = tabCount - 1 }  if active < 0 { active = 0 }
         }
 
-        // ── reload the active tab + focused pane for rendering + push its title ──
+        // ── reload the active tab + focused pane for rendering + push its title.
+        //    Only when we're about to draw (dirty) — saves a per-frame deep copy. ──
+        if dirty == 1 && configured == 1 && running == 1 {
         act = envGet(sessions, "" + active)
         split = envGet(act, "split")  pfocus = envGet(act, "pfocus")
         fenv = act  if pfocus == 1 { fenv = envGet(act, "pane1") }
         gb = envGet(fenv, "gb")  ab = envGet(fenv, "ab")  bb = envGet(fenv, "bb")  ub = envGet(fenv, "ub")
-        meta = envGet(fenv, "meta")  scrollback = envGet(fenv, "scrollback")  bell = envGet(fenv, "bell")  scrollOff = envGet(fenv, "scrollOff")
+        meta = envGet(fenv, "meta")  bell = envGet(fenv, "bell")  scrollOff = envGet(fenv, "scrollOff")
+        scrollback = ""  if scrollOff > 0 { scrollback = envGet(sbStore, "" + envGet(fenv, "m")) }
         selSR = envGet(fenv, "selSR")  selSC = envGet(fenv, "selSC")  selER = envGet(fenv, "selER")  selEC = envGet(fenv, "selEC")  hasSel = envGet(fenv, "hasSel")
         let atitle = envGet(act, "title")
         if atitle != lastTitle { lastTitle = atitle  wlSetTitle(fd, TOP, atitle)  wlCommit(fd, SURF) }
@@ -1018,7 +1074,6 @@ just run {
         // 4) present. Reuse ONE shared memfd/mmap/pool across frames (mmapShared
         // has no munmap, so a per-frame mapping leaked ~MBs/frame -> OOM crash).
         // Reallocate only when the window grows beyond the current allocation.
-        if dirty == 1 && configured == 1 && running == 1 {
             let stride = W * 4
             let sz = stride * H
             if sz > fbSz {
@@ -1047,7 +1102,7 @@ just run {
                     let foc = 0  if pr == pfocus { foc = 1 }
                     let pgb = envGet(penv, "gb")  let pso = envGet(penv, "scrollOff")
                     if foc == 1 && pso > 0 {
-                        kDrawScrollback(px, W, H, font, envGet(penv, "scrollback"), pgb, pc, prw, pso, bg, fg, pyb, pxb)
+                        kDrawScrollback(px, W, H, font, envGet(sbStore, "" + envGet(penv, "m")), pgb, pc, prw, pso, bg, fg, pyb, pxb)
                     } else {
                         kDrawScreen(px, W, H, font, pgb, envGet(penv, "ab"), envGet(penv, "bb"), envGet(penv, "ub"), envGet(penv, "meta"), pc, prw, bg, fg, 0, curColor, curStyle, envGet(penv, "hasSel"), envGet(penv, "selSR"), envGet(penv, "selSC"), envGet(penv, "selER"), envGet(penv, "selEC"), pal, pyb, pxb, foc)
                     }
@@ -1058,7 +1113,11 @@ just run {
             }
             if tabsOn == 1 { kDrawTabBar(px, W, H, font, sessions, tabCount, active) }
             let didFlash = bell  bell = 0
-            act = envSet(act, "bell", 0)  sessions = envSet(sessions, "" + active, act)   // consume the flash
+            if didFlash == 1 {                                  // consume the flash (only touch the env when it actually rang)
+                fenv = envSet(fenv, "bell", 0)
+                if pfocus == 1 { act = envSet(act, "pane1", fenv) } else { act = fenv }
+                sessions = envSet(sessions, "" + active, act)
+            }
             let buf = nextId  nextId = nextId + 1
             wlPoolCreateBuffer(fd, fbPool, buf, 0, W, H, stride, 1)
             wlSurfaceAttach(fd, SURF, buf, 0, 0)
