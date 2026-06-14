@@ -601,7 +601,8 @@ func sbPush(store, key, add, sbCap) {
 func sessPump(s, cols, rows, pal, sbCap, bellMode) {
     let m = envGet(s, "m")
     let gb = envGet(s, "gb")  let ab = envGet(s, "ab")  let bb = envGet(s, "bb")  let ub = envGet(s, "ub")
-    let meta = envGet(s, "meta")  let pending = envGet(s, "pending")
+    let meta = envGet(s, "meta")  if indexOf(meta, fromCharCode(1)) < 0 { meta = gridInitMeta() }   // corrupted/empty meta -> re-init before feeding gridFeedB
+    let pending = envGet(s, "pending")
     let title = envGet(s, "title")  let bell = envGet(s, "bell")  let quiet = envGet(s, "quiet")
     let kicked = envGet(s, "kicked")  let kickIn = envGet(s, "kickIn")  let kickArmed = envGet(s, "kickArmed")
     let dirty = 0  let touched = 0  let scOut = ""

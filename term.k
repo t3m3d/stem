@@ -423,6 +423,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
     let stride = cols * 5
     let tailFull = meta
     let sohp = indexOf(tailFull, fromCharCode(1))
+    if sohp < 0 { tailFull = gridInitMeta()  sohp = indexOf(tailFull, fromCharCode(1)) }   // corrupted/empty meta -> re-init (substring(s,0,-1) would SEGFAULT)
     let tail = substring(tailFull, 0, sohp)
     let afterSoh = substring(tailFull, sohp + 1, len(tailFull))   // scrolled <SOH> savedGrids
     let soh2 = indexOf(afterSoh, fromCharCode(1))
@@ -941,8 +942,7 @@ func gridCshape(state, cols, rows) {
 func gridMouse(state, cols, rows) {
     let total = cols * rows
     let tailFull = substring(state, 7 * total + 1, len(state))
-    let sohp = indexOf(tailFull, fromCharCode(1))
-    let tail = substring(tailFull, 0, sohp)
+    let tail = _mtail(tailFull)
     emit _cf(tail, 8) + "," + _cf(tail, 9)
 }
 
@@ -984,8 +984,7 @@ func gridFocus(state, cols, rows) {
 func gridBell(state, cols, rows) {
     let total = cols * rows
     let tailFull = substring(state, 7 * total + 1, len(state))
-    let sohp = indexOf(tailFull, fromCharCode(1))
-    emit _cf(substring(tailFull, 0, sohp), 7)
+    emit _cf(_mtail(tailFull), 7)
 }
 
 // gridScrolled(state, cols, rows) — the rows that scrolled off the top during the
