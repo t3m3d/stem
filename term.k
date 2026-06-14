@@ -656,8 +656,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                 }
             }
         } else {
-            if c == 10 {                                                         // LF → newline
-                cc = 0  pw = 0
+            if c == 10 {                                                         // LF → line feed: pure vertical motion. KEEP column AND pending-wrap (xterm: LF is orthogonal to the deferred wrap; only CR/ONLCR resets the column, only the next printable resolves the wrap).
                 let eBot = scrollBot  if scrollTop == 0 && scrollBot == 0 { eBot = rows - 1 }
                 if cr == eBot {                                                  // at bottom margin -> scroll region up
                     if scrollTop == 0 && eBot == rows - 1 && altActive == 0 {    // full screen -> feed scrollback
