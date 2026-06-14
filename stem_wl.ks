@@ -499,6 +499,82 @@ func kDrawScrollback(px, W, H, font, scrollback, gb, cols, rows, scrollOff, bg, 
     fbDrawText(px, W, H, font, W - 80, 2, "^" + scrollOff + " (shift+pgdn=back)", 16776960)   // scroll indicator
 }
 
+// ── session model: each tab is one PTY + its own grid plane buffers + meta. The
+// per-tab state lives in an env (envSet/envGet) since native lists can't index. ──
+func sessNew(cols, rows, shell, term) {
+    let m = ptyMaster("/dev/ptmx")
+    let slave = ptySlaveName(m)
+    let nl = fromCharCode(10)
+    let wrapPath = "/tmp/.stem-shell-" + m
+    let wrap = "#!/bin/sh" + nl + "export TERM=" + term + nl + "export COLORTERM=truecolor" + nl + "exec " + shell + nl
+    writeFile(wrapPath, wrap)
+    exec("chmod +x " + wrapPath + " 2>/dev/null")
+    let pid = ptyForkExec(slave, wrapPath)
+    let tries = 0
+    while tries < 60 { if ptySetSize(m, rows, cols) == 0 { tries = 60 } else { sleepUs(0, 10000)  tries = tries + 1 } }
+    ptySetNonblock(m)
+    let gb = bufNew(5 * cols * rows)  let ab = bufNew(cols * rows)  let bb = bufNew(cols * rows)  let ub = bufNew(cols * rows)
+    gridBlank(gb, ab, bb, ub, cols, rows)
+    let s = envNew()
+    s = envSet(s, "m", m)        s = envSet(s, "pid", pid)
+    s = envSet(s, "gb", gb)      s = envSet(s, "ab", ab)      s = envSet(s, "bb", bb)      s = envSet(s, "ub", ub)
+    s = envSet(s, "meta", gridInitMeta())  s = envSet(s, "sb", "")  s = envSet(s, "pending", "")  s = envSet(s, "title", "stem")
+    s = envSet(s, "scrollOff", 0)  s = envSet(s, "bell", 0)  s = envSet(s, "quiet", 0)
+    s = envSet(s, "kicked", 0)  s = envSet(s, "kickIn", 30)  s = envSet(s, "kickArmed", 1)
+    s = envSet(s, "scrollback", "")  s = envSet(s, "selecting", 0)  s = envSet(s, "hasSel", 0)
+    s = envSet(s, "selSR", 0)  s = envSet(s, "selSC", 0)  s = envSet(s, "selER", 0)  s = envSet(s, "selEC", 0)
+    emit s
+}
+
+// drain one session's PTY, feed its grid buffers (in place), update its env. Sets
+// the "dirty" field to 1 if the session's screen changed this pump. Returns the
+// updated session env. Same logic for foreground + background tabs.
+func sessPump(s, cols, rows, pal, sbCap, bellMode) {
+    let m = envGet(s, "m")
+    let gb = envGet(s, "gb")  let ab = envGet(s, "ab")  let bb = envGet(s, "bb")  let ub = envGet(s, "ub")
+    let meta = envGet(s, "meta")  let pending = envGet(s, "pending")  let sb = envGet(s, "scrollback")
+    let title = envGet(s, "title")  let bell = envGet(s, "bell")  let quiet = envGet(s, "quiet")
+    let kicked = envGet(s, "kicked")  let kickIn = envGet(s, "kickIn")  let kickArmed = envGet(s, "kickArmed")
+    let dirty = 0
+    if kickArmed == 1 && kickIn > 0 {
+        kickIn = kickIn - 1
+        if kickIn == 0 { fdWrite(m, fromCharCode(12), 1)  kicked = 1  kickArmed = 0  dirty = 1 }
+    }
+    let out = fdRead(m, 16384)
+    if len(out) > 0 {
+        if kickArmed == 1 { kickIn = 30 }
+        let chunk = pending + out
+        let nt = oscTitle(chunk, title)
+        if nt != title && nt != "" { title = nt }
+        let cut = gridSafeLen(chunk)
+        if cut > 0 {
+            let fed = substring(chunk, 0, cut)
+            oscApply(fed, pal)                       // palette (OSC 4) is shared across tabs
+            meta = gridFeedB(gb, ab, bb, ub, meta, fed, cols, rows)
+            let rep = termReplies(fed, meta, cols, rows)
+            if len(rep) > 0 { fdWrite(m, rep, len(rep)) }
+            if gridBellM(meta) == 1 { if bellMode == "visual" { bell = 1 } }
+            let sc = gridScrolledM(meta)
+            if len(sc) > 0 {
+                sb = sb + sc
+                let cap = sbCap * 200
+                if len(sb) > cap { sb = substring(sb, len(sb) - cap, len(sb)) }
+            }
+            dirty = 1
+        }
+        pending = substring(chunk, cut, len(chunk))
+        quiet = 0
+    } else {
+        quiet = quiet + 1
+        if quiet >= 2 && len(pending) > 0 { meta = gridFeedB(gb, ab, bb, ub, meta, pending, cols, rows)  pending = ""  dirty = 1 }
+    }
+    s = envSet(s, "meta", meta)  s = envSet(s, "pending", pending)  s = envSet(s, "scrollback", sb)
+    s = envSet(s, "title", title)  s = envSet(s, "bell", bell)  s = envSet(s, "quiet", quiet)
+    s = envSet(s, "kicked", kicked)  s = envSet(s, "kickIn", kickIn)  s = envSet(s, "kickArmed", kickArmed)
+    s = envSet(s, "dirty", dirty)
+    emit s
+}
+
 just run {
     // ── config ──
     let conf = confLoad()
