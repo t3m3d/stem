@@ -410,13 +410,17 @@ func gridFeed(state, s, cols, rows) {
     let bb = _sToBuf(substring(state, g5 + total, g5 + 2 * total))
     let meta = substring(state, g5 + 2 * total + 1, len(state))   // tail<SOH>scrolled<SOH>savedGrids
     let ub = bufNew(total)                                        // underline plane (discarded for CLI/tests)
-    let nm = gridFeedB(gb, ab, bb, ub, meta, s, cols, rows)
+    let nm = gridFeedB(gb, ab, bb, ub, meta, s, cols, rows, 0)   // string wrapper = strict xterm
     emit _bufToS(gb, g5) + _bufToS(ab, total) + _bufToS(bb, total) + "|" + nm
 }
 
 // gridFeedB — the real engine. Mutates the plane buffers gb/ab/bb IN PLACE and
 // returns only the (small) meta string. No O(gridsize) work per feed.
-func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
+// lfClearWrap: 1 = a bare LF also clears the pending auto-wrap (legacy/Hyprland
+// frontend gates this on; avoids the xterm "empty row after a full line + bare
+// LF" quirk). 0 = strict xterm (LF is pure vertical motion, pending wrap
+// survives). CLI/tests/string-wrapper use 0.
+func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows, lfClearWrap) {
     let total = cols * rows
     let g5 = 5 * total
     let gtotal = g5
@@ -656,7 +660,8 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                 }
             }
         } else {
-            if c == 10 {                                                         // LF → line feed: pure vertical motion. KEEP column AND pending-wrap (xterm: LF is orthogonal to the deferred wrap; only CR/ONLCR resets the column, only the next printable resolves the wrap).
+            if c == 10 {                                                         // LF → line feed: pure vertical motion. KEEP column (xterm: only CR/ONLCR resets it). Pending-wrap normally survives too (only the next printable resolves it); lfClearWrap==1 drops it (Hyprland gate).
+                if lfClearWrap == 1 { pw = 0 }
                 let eBot = scrollBot  if scrollTop == 0 && scrollBot == 0 { eBot = rows - 1 }
                 if cr == eBot {                                                  // at bottom margin -> scroll region up
                     if scrollTop == 0 && eBot == rows - 1 && altActive == 0 {    // full screen -> feed scrollback

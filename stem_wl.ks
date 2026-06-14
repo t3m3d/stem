@@ -610,7 +610,7 @@ func sbPush(store, key, add, sbCap) {
 // keyed by fd) — here we only EMIT this frame's scrolled-off lines via "scrolledOut".
 // And we only write the env back when something actually changed ("ch"=1); idle
 // panes touch nothing (quiet caps), so the heap doesn't bleed every frame.
-func sessPump(s, cols, rows, pal, sbCap, bellMode) {
+func sessPump(s, cols, rows, pal, sbCap, bellMode, lfClearWrap) {
     let m = envGet(s, "m")
     let gb = envGet(s, "gb")  let ab = envGet(s, "ab")  let bb = envGet(s, "bb")  let ub = envGet(s, "ub")
     let meta = envGet(s, "meta")  if indexOf(meta, fromCharCode(1)) < 0 { meta = gridInitMeta() }   // corrupted/empty meta -> re-init before feeding gridFeedB
@@ -636,7 +636,7 @@ func sessPump(s, cols, rows, pal, sbCap, bellMode) {
         if cut > 0 {
             let fed = substring(chunk, 0, cut)
             oscApply(fed, pal)                       // palette (OSC 4) is shared across tabs
-            meta = gridFeedB(gb, ab, bb, ub, meta, fed, cols, rows)
+            meta = gridFeedB(gb, ab, bb, ub, meta, fed, cols, rows, lfClearWrap)
             let rep = termReplies(fed, meta, cols, rows)
             if len(rep) > 0 { fdWrite(m, rep, len(rep)) }
             if gridBellM(meta) == 1 { if bellMode == "visual" { bell = 1 } }
@@ -647,7 +647,7 @@ func sessPump(s, cols, rows, pal, sbCap, bellMode) {
         quiet = 0
     } else {
         if quiet < 4 { quiet = quiet + 1  touched = 1 }   // cap: a fully idle pane stops mutating -> no env churn
-        if quiet >= 2 && len(pending) > 0 { meta = gridFeedB(gb, ab, bb, ub, meta, pending, cols, rows)  pending = ""  dirty = 1  touched = 1 }
+        if quiet >= 2 && len(pending) > 0 { meta = gridFeedB(gb, ab, bb, ub, meta, pending, cols, rows, lfClearWrap)  pending = ""  dirty = 1  touched = 1 }
     }
     if touched == 1 {
         s = envSet(s, "meta", meta)  s = envSet(s, "pending", pending)  s = envSet(s, "scrolledOut", scOut)
@@ -678,7 +678,8 @@ just run {
     // and give the whole window to the grid. Splits stay on (useful: subdivide one
     // window without spawning more). Detect via Hyprland's instance signature.
     let tabsOn = 1
-    if exec("printenv HYPRLAND_INSTANCE_SIGNATURE 2>/dev/null") != "" { tabsOn = 0 }
+    let lfClearWrap = 0                                            // strict xterm: bare LF keeps pending wrap
+    if exec("printenv HYPRLAND_INSTANCE_SIGNATURE 2>/dev/null") != "" { tabsOn = 0  lfClearWrap = 1 }   // Hyprland: drop pending wrap on LF (no empty-row-after-full-line quirk)
 
     // initial size from config grid (a tiling compositor may override on map).
     let cfgCols = confGetInt(conf, "cols", 100)
@@ -1028,7 +1029,7 @@ just run {
         let pi = 0
         while pi < tabCount {
             let ts = envGet(sessions, "" + pi)  let sp = envGet(ts, "split")
-            ts = sessPump(ts, paneCols(sp, 0, cols, trows), paneRows(sp, 0, cols, trows), pal, sbCap, bellMode)
+            ts = sessPump(ts, paneCols(sp, 0, cols, trows), paneRows(sp, 0, cols, trows), pal, sbCap, bellMode, lfClearWrap)
             let changed = envGet(ts, "ch")
             if changed == 1 {
                 if envGet(ts, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
@@ -1036,7 +1037,7 @@ just run {
                 if len(so0) > 0 { sbStore = sbPush(sbStore, "" + envGet(ts, "m"), so0, sbCap) }
             }
             if sp != 0 {
-                let p1 = sessPump(envGet(ts, "pane1"), paneCols(sp, 1, cols, trows), paneRows(sp, 1, cols, trows), pal, sbCap, bellMode)
+                let p1 = sessPump(envGet(ts, "pane1"), paneCols(sp, 1, cols, trows), paneRows(sp, 1, cols, trows), pal, sbCap, bellMode, lfClearWrap)
                 if envGet(p1, "ch") == 1 {
                     if envGet(p1, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
                     let so1 = envGet(p1, "scrolledOut")
