@@ -55,12 +55,16 @@ compute geometry; `sessResize` reallocs a pane. `kDrawScreen`/`kDrawScrollback`
 gained `xBase`+`focused` and rect-clear so panes composite.
 
 KNOWN ISSUE: heavy wrapping prompts (starship) STACK on redraw in narrow panes —
-command output is clean, only the prompt duplicates. Root cause: no deferred/
-pending-wrap (xterm last-column delayed wrap). fish computes wrapped-prompt cursor
-"up N rows" assuming delayed wrap; our eager wrap drifts the count. FIX NEXT in
-term.k: add a pending-wrap flag (set when a glyph lands in the last column; the
-actual line advance happens on the NEXT printable, not immediately). Helps general
-fidelity, not just splits.
+command OUTPUT is clean, only the prompt duplicates + typed chars scatter diagonally
+(≈ one prompt redraw per keystroke landing one row too low). NOT a missing-feature
+bug: term.k already has correct xterm deferred/pending-wrap (the `pw` flag, line
+~685/716). Remaining suspect: an off-by-one in WRAPPED-line cursor accounting (a
+2-line prompt that wraps to 4 physical rows at narrow width — fish's "cursor up N
+to redraw in place" drifts by ~1 row/redraw). NEXT: reproduce SYNTHETICALLY in
+test_tui (feed a prompt wider than `cols` + a CUU-based redraw, assert the grid),
+not via the live heavy prompt. Likely in CUU/CUD clamping or the last-column write
+interacting with a subsequent CR+CUU. Affects only multi-row wrapping prompts in
+narrow widths; full-width single pane is pristine.
 
 ## (original splits plan, kept for the recursive >2-pane future)
 - A layout tree (binary h/v split nodes; leaves = sessions). Each leaf gets a
