@@ -429,7 +429,7 @@ func kCharAtCol(line, col) {
 }
 
 // ── render: stem grid -> framebuffer, per-cell ANSI colour. Block cursor; bell. ──
-func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal) {
+func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal, yBase) {
     let back = bg
     if bell == 1 { back = 3355494 }                 // visual-bell flash
     fbClear(px, W, H, back)
@@ -441,7 +441,7 @@ func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell,
         while c < cols {
             let idx = r * cols + c
             let off = idx * 5
-            let x = 4 + c * 8  let y = 2 + r * 16
+            let x = 4 + c * 8  let y = yBase + r * 16
             let cellFg = kColorOf(toInt(bufGetByte(ab, idx)), fg, pal)
             let cellBg = kColorOf(toInt(bufGetByte(bb, idx)), back, pal)
             if hasSel == 1 && kInSel(r, c, cols, selSR, selSC, selER, selEC) == 1 {
@@ -462,7 +462,7 @@ func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell,
     let cr = toInt(substring(cur, 0, comma))
     let cc = toInt(substring(cur, comma + 1, len(cur)))
     if cr >= 0 && cr < rows && cc >= 0 && cc < cols {
-        let cx = 4 + cc * 8  let cy = 2 + cr * 16
+        let cx = 4 + cc * 8  let cy = yBase + cr * 16
         let coff = (cr * cols + cc) * 5
         let cglyph = kCellCp(gb, coff, toInt(bufGetByte(gb, coff)))   // cursor cell glyph (from buffer)
         let cstyle = curStyle                            // app DECSCUSR overrides the config default
@@ -487,16 +487,43 @@ func kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell,
 
 // scrollback view: history + live grid, offset up by scrollOff lines (monochrome —
 // scrolled-off rows are stored as plain text). A "▲" marks we're not at the bottom.
-func kDrawScrollback(px, W, H, font, scrollback, gb, cols, rows, scrollOff, bg, fg) {
+func kDrawScrollback(px, W, H, font, scrollback, gb, cols, rows, scrollOff, bg, fg, yBase) {
     fbClear(px, W, H, bg)
     let view = gridScrollView(scrollback, gridPlainB(gb, cols, rows), rows, scrollOff)
     let r = 0
     while r < rows {
         let line = gridStripSgr(getLine(view, r))   // history rows carry SGR; strip for the mono view
-        fbDrawText(px, W, H, font, 4, 2 + r * 16, line, fg)
+        fbDrawText(px, W, H, font, 4, yBase + r * 16, line, fg)
         r = r + 1
     }
-    fbDrawText(px, W, H, font, W - 80, 2, "^" + scrollOff + " (shift+pgdn=back)", 16776960)   // scroll indicator
+    fbDrawText(px, W, H, font, W - 80, yBase, "^" + scrollOff + " (shift+pgdn=back)", 16776960)   // scroll indicator
+}
+
+// the tab bar across row 0: one segment per tab (number + short title), the active
+// one highlighted in krypton green. Drawn over the top 18px after the grid render.
+func kDrawTabBar(px, W, H, font, sessions, tabCount, active) {
+    fbFillRect(px, W, 0, 0, W, 18, 858384)             // 0x0d1510 bar background
+    let segW = W / tabCount
+    if segW > 200 { segW = 200 }
+    let i = 0
+    while i < tabCount {
+        let x0 = i * segW
+        let s = envGet(sessions, "" + i)
+        let t = envGet(s, "title")
+        let label = "" + (i + 1) + " " + t
+        let maxCh = (segW - 16) / 8
+        if maxCh < 1 { maxCh = 1 }
+        if len(label) > maxCh { label = substring(label, 0, maxCh) }
+        let txt = 10010008                              // 0x98ff98 light green
+        if i == active {
+            fbFillRect(px, W, x0, 0, segW - 1, 18, 3841354)   // 0x3a9d4a active green
+            txt = 858384                                // dark text on the highlight
+        } else {
+            fbFillRect(px, W, x0, 0, segW - 1, 18, 1976352)   // 0x1e2a20 inactive
+        }
+        fbDrawText(px, W, H, font, x0 + 6, 1, label, txt)
+        i = i + 1
+    }
 }
 
 // ── session model: each tab is one PTY + its own grid plane buffers + meta. The
@@ -598,23 +625,14 @@ just run {
     let cols = (W - 8) / 8
     let rows = (H - 4) / 16
 
-    // ── pty + shell FIRST, BEFORE wlConnect ──
-    // The shell is forked here; if we connected to Wayland first, the forked
-    // child would inherit the Wayland socket fd and keep the compositor
-    // connection (and thus the window) alive after stem exits — orphan
-    // zombie windows that ignore close. Forking before connect avoids that.
-    let m = ptyMaster("/dev/ptmx")
-    let slave = ptySlaveName(m)
-    // ptyForkExec inherits stem's environment, and a Wayland session (Hyprland)
-    // usually has no TERM — so fish/ncurses/clear break ("TERM not set"). There is
-    // no setenv builtin, so launch the shell through a tiny wrapper that exports
-    // TERM first. As a bonus `shell` may now carry args (e.g. "/usr/bin/fish -l").
-    let nl = fromCharCode(10)
-    let wrapPath = "/tmp/.stem-shell-" + m
-    let wrap = "#!/bin/sh" + nl + "export TERM=" + term + nl + "export COLORTERM=truecolor" + nl + "exec " + shell + nl
-    writeFile(wrapPath, wrap)
-    exec("chmod +x " + wrapPath + " 2>/dev/null")
-    let childPid = ptyForkExec(slave, wrapPath)
+    // reserve the top cell-row for the tab bar -> terminal grid is `trows` tall.
+    let trows = rows - 1  if trows < 1 { trows = 1 }
+    // ── session 0 created BEFORE wlConnect so the forked shell doesn't inherit
+    // the wayland fd (which would keep orphan windows alive). sessNew forks the
+    // PTY (TERM wrapper), allocs+blanks the planes, returns a session env. ──
+    let sessions = envNew()
+    sessions = envSet(sessions, "0", sessNew(cols, trows, shell, term))
+    let tabCount = 1  let active = 0
 
     // ── wayland surface (child already forked: it has no Wayland fd) ──
     let fd = wlConnect()
@@ -638,34 +656,29 @@ just run {
     wlCommit(fd, SURF)
 
     let font = stemFontLoad()
-    let tries = 0
-    while tries < 60 { if ptySetSize(m, rows, cols) == 0 { tries = 60 } else { sleepUs(0, 10000)  tries = tries + 1 } }
-    ptySetNonblock(m)
     fdSetNonblock(fd)                  // wayland fd: poll, don't block
-    // persistent plane buffers (mutated in place by gridFeedB — no per-feed alloc)
-    let gb = bufNew(5 * cols * rows)  let ab = bufNew(cols * rows)  let bb = bufNew(cols * rows)
-    let ub = bufNew(cols * rows)      // per-cell underline plane (SGR 4)
-    gridBlank(gb, ab, bb, ub, cols, rows)
-    let meta = gridInitMeta()
     let pal = palInit()                // live 256-colour palette (OSC 4 overrides)
 
     let shift = 0  let ctrl = 0  let alt = 0
-    let nextId = 12  let prevBuf = 0  let prevPool = 0  let prevMfd = 0
+    let nextId = 12  let prevBuf = 0
     let dirty = 1  let running = 1  let configured = 0
-    let kicked = 0  let kickIn = 0  let kickArmed = 0   // debounced startup Ctrl-L once the shell settles
-    let title = "stem"  let bell = 0
-    let pending = ""        // partial escape/UTF-8 carried between reads
-    let scrollback = ""     // lines that scrolled off the top (history)
-    let quiet = 0           // consecutive empty reads (flush a buffered tail)
-    let scrollOff = 0       // scrollback view offset (0 = live bottom)
+    let lastTitle = "stem"
     let sbCap = confGetInt(conf, "scrollback", 2000)
-    // mouse selection (live screen only): drag left button to select, release copies
-    let selecting = 0  let hasSel = 0
-    let selSR = 0  let selSC = 0  let selER = 0  let selEC = 0
     let ptrR = 0   let ptrC = 0   let heldBtn = 0 - 1   // SGR button held for drag reporting (-1 none)
     let eb = bufNew(8192)              // reused every loop (was leaking 8KB/iteration)
     let fbMem = 0  let fbPx = 0  let fbPool = 0  let fbSz = 0   // shared framebuffer, reused across frames
+    let switchTo = 0 - 1  let wantNew = 0  let wantClose = 0     // deferred tab ops (applied after events)
+    let wantResize = 0  let wantW = 0  let wantH = 0
     while running == 1 {
+        switchTo = 0 - 1  wantNew = 0  wantClose = 0  wantResize = 0   // reset deferred ops each frame
+        // load the ACTIVE tab's per-session state into working locals for this frame
+        let act = envGet(sessions, "" + active)
+        let m = envGet(act, "m")
+        let gb = envGet(act, "gb")  let ab = envGet(act, "ab")  let bb = envGet(act, "bb")  let ub = envGet(act, "ub")
+        let meta = envGet(act, "meta")  let scrollback = envGet(act, "scrollback")  let bell = envGet(act, "bell")
+        let scrollOff = envGet(act, "scrollOff")
+        let selecting = envGet(act, "selecting")  let hasSel = envGet(act, "hasSel")
+        let selSR = envGet(act, "selSR")  let selSC = envGet(act, "selSC")  let selER = envGet(act, "selER")  let selEC = envGet(act, "selEC")
         // 1) drain wayland events (non-blocking)
         let en = wlRecvInto(fd, eb, 8192)
         let off = 0
@@ -675,29 +688,12 @@ just run {
             else {
                 if obj == WM && op == 0 { wlPong(fd, WM, wlU32(eb, off + 8)) }
                 if obj == XS && op == 0 {
-                    wlAckConfigure(fd, XS, wlU32(eb, off + 8))
-                    // Arm a DEBOUNCED Ctrl-L: it fires ~240ms after the shell's
-                    // startup output stops (each chunk resets kickIn below), so a
-                    // slow shell reprints its prompt once into the final grid.
-                    if configured == 0 { kickArmed = 1  kickIn = 30 }
+                    wlAckConfigure(fd, XS, wlU32(eb, off + 8))   // sessNew arms each tab's kick
                     configured = 1  dirty = 1
                 }
-                if obj == TOP && op == 0 {
+                if obj == TOP && op == 0 {                       // resize -> apply to all tabs after events
                     let cw = wlU32(eb, off + 8)  let chh = wlU32(eb, off + 12)
-                    if cw > 0 && chh > 0 && (cw != W || chh != H) {
-                        W = cw  H = chh
-                        cols = (W - 8) / 8  rows = (H - 4) / 16
-                        ptySetSize(m, rows, cols)
-                        gb = bufNew(5 * cols * rows)  ab = bufNew(cols * rows)  bb = bufNew(cols * rows)
-                        ub = bufNew(cols * rows)
-                        gridBlank(gb, ab, bb, ub, cols, rows)  meta = gridInitMeta()
-                        hasSel = 0  selecting = 0
-                        // a running shell redraws on SIGWINCH (ptySetSize above); only
-                        // force Ctrl-L for resizes after the startup kick, else it
-                        // races the shell's startup and stacks/blanks the prompt.
-                        if kicked == 1 { fdWrite(m, fromCharCode(12), 1) }
-                        dirty = 1
-                    }
+                    if cw > 0 && chh > 0 && (cw != W || chh != H) { wantW = cw  wantH = chh  wantResize = 1 }
                 }
                 if obj == TOP && op == 1 { running = 0 }    // xdg_toplevel.close -> exit cleanly (keybind close works)
                 if obj == 1 && op == 0 { running = 0 }      // wl_display.error
@@ -711,16 +707,24 @@ just run {
                     let state = wlU32(eb, off + 20)
                     let kc = wlKeyToKc(wlU32(eb, off + 16))
                     if state == 1 {
+                        // ── tab management (handled here, never sent to the shell) ──
+                        let tabKey = 0
+                        if ctrl == 1 && shift == 1 && kc == 28 { wantNew = 1  tabKey = 1 }        // Ctrl-Shift-T new
+                        if ctrl == 1 && shift == 1 && kc == 25 { wantClose = 1  tabKey = 1 }      // Ctrl-Shift-W close
+                        if ctrl == 1 && shift == 0 && kc == 112 { switchTo = active - 1  tabKey = 1 }  // Ctrl-PgUp prev
+                        if ctrl == 1 && shift == 0 && kc == 117 { switchTo = active + 1  tabKey = 1 }  // Ctrl-PgDn next
+                        if alt == 1 && kc >= 10 && kc <= 18 { switchTo = kc - 10  tabKey = 1 }    // Alt-1..9 jump
+                        if tabKey == 0 {
                         if hasSel == 1 { hasSel = 0  dirty = 1 }     // typing clears the selection
                         // Shift+PageUp/Down scrolls the scrollback (not sent to shell).
                         if shift == 1 && kc == 112 {
-                            scrollOff = scrollOff + rows - 2
+                            scrollOff = scrollOff + trows - 2
                             let maxOff = toInt(lineCount(scrollback))
                             if scrollOff > maxOff { scrollOff = maxOff }
                             dirty = 1
                         }
                         else { if shift == 1 && kc == 117 {
-                            scrollOff = scrollOff - (rows - 2)
+                            scrollOff = scrollOff - (trows - 2)
                             if scrollOff < 0 { scrollOff = 0 }
                             dirty = 1
                         } else {
@@ -738,13 +742,14 @@ just run {
                                 if bytes != "" { fdWrite(m, bytes, len(bytes)) }
                             }
                         } }
+                        }
                     }
                 }
                 if obj == PTR && op == 2 {                   // wl_pointer.motion -> track cell
                     let px = toInt(wlU32(eb, off + 12)) / 256   // wl_fixed -> px
                     let py = toInt(wlU32(eb, off + 16)) / 256
-                    let nC = (px - 4) / 8   if nC < 0 { nC = 0 }  if nC >= cols { nC = cols - 1 }
-                    let nR = (py - 2) / 16  if nR < 0 { nR = 0 }  if nR >= rows { nR = rows - 1 }
+                    let nC = (px - 4) / 8    if nC < 0 { nC = 0 }  if nC >= cols { nC = cols - 1 }
+                    let nR = (py - 18) / 16  if nR < 0 { nR = 0 }  if nR >= trows { nR = trows - 1 }   // -18: below tab bar
                     let moved = 0  if nC != ptrC || nR != ptrR { moved = 1 }
                     ptrC = nC  ptrR = nR
                     if selecting == 1 { selER = ptrR  selEC = ptrC  hasSel = 1  dirty = 1 }
@@ -780,7 +785,7 @@ just run {
                         } else {                             // release: copy selection to clipboard
                             selecting = 0
                             if hasSel == 1 && scrollOff == 0 {
-                                let seltext = kSelText(gb, cols, rows, selSR, selSC, selER, selEC)
+                                let seltext = kSelText(gb, cols, trows, selSR, selSC, selER, selEC)
                                 if len(seltext) > 0 {
                                     writeFile("/tmp/.stem_sel", seltext)
                                     exec("wl-copy < /tmp/.stem_sel 2>/dev/null")
@@ -826,56 +831,87 @@ just run {
                 off = off + s
             }
         }
-        // debounced startup kick: fire once the countdown elapses (reset by each
-        // startup output chunk below) so the shell reprints its prompt exactly once.
-        if kickArmed == 1 && kickIn > 0 {
-            kickIn = kickIn - 1
-            if kickIn == 0 { fdWrite(m, fromCharCode(12), 1)  kicked = 1  kickArmed = 0  dirty = 1 }
+        // ── save the active tab's input-modified state back into its env ──
+        act = envSet(act, "scrollOff", scrollOff)  act = envSet(act, "selecting", selecting)  act = envSet(act, "hasSel", hasSel)
+        act = envSet(act, "selSR", selSR)  act = envSet(act, "selSC", selSC)  act = envSet(act, "selER", selER)  act = envSet(act, "selEC", selEC)
+        act = envSet(act, "bell", bell)
+        sessions = envSet(sessions, "" + active, act)
+
+        // ── deferred tab ops ──
+        if wantResize == 1 {
+            W = wantW  H = wantH  cols = (W - 8) / 8  rows = (H - 4) / 16  trows = rows - 1  if trows < 1 { trows = 1 }
+            let ti = 0
+            while ti < tabCount {
+                let ts = envGet(sessions, "" + ti)  let tm = envGet(ts, "m")
+                ptySetSize(tm, trows, cols)
+                let ng = bufNew(5 * cols * trows)  let na2 = bufNew(cols * trows)  let nb2 = bufNew(cols * trows)  let nu2 = bufNew(cols * trows)
+                gridBlank(ng, na2, nb2, nu2, cols, trows)
+                ts = envSet(ts, "gb", ng)  ts = envSet(ts, "ab", na2)  ts = envSet(ts, "bb", nb2)  ts = envSet(ts, "ub", nu2)
+                ts = envSet(ts, "meta", gridInitMeta())  ts = envSet(ts, "hasSel", 0)  ts = envSet(ts, "selecting", 0)  ts = envSet(ts, "scrollOff", 0)
+                fdWrite(tm, fromCharCode(12), 1)
+                sessions = envSet(sessions, "" + ti, ts)
+                ti = ti + 1
+            }
+            dirty = 1
         }
-        // 2) drain pty output -> grid. Carry partial escape/UTF-8 across reads
-        // (gridSafeLen) or colour/box-drawing output split mid-sequence corrupts.
-        let out = fdRead(m, 16384)
-        if len(out) > 0 {
-            if kickArmed == 1 { kickIn = 30 }   // shell still emitting startup -> hold the kick
-            let chunk = pending + out
-            let nt = oscTitle(chunk, title)
-            if nt != title && nt != "" { title = nt  wlSetTitle(fd, TOP, title)  wlCommit(fd, SURF) }
-            let cut = gridSafeLen(chunk)
-            if cut > 0 {
-                let fed = substring(chunk, 0, cut)
-                // OSC 4/10/11/12 theming: update palette + default fg/bg/cursor.
-                let oc = oscApply(fed, pal)
-                let oci = indexOf(oc, ",")
-                let ocFg = toInt(substring(oc, 0, oci))
-                let ocR = substring(oc, oci + 1, len(oc))
-                let ocj = indexOf(ocR, ",")
-                let ocBg = toInt(substring(ocR, 0, ocj))
-                let ocCur = toInt(substring(ocR, ocj + 1, len(ocR)))
-                if ocFg >= 0 { fg = ocFg }
-                if ocBg >= 0 { bg = ocBg }
-                if ocCur >= 0 { curColor = ocCur }
-                meta = gridFeedB(gb, ab, bb, ub, meta, fed, cols, rows)
-                // answer DSR/DA queries (post-feed cursor) so the shell doesn't stall
-                let rep = termReplies(fed, meta, cols, rows)
-                if len(rep) > 0 { fdWrite(m, rep, len(rep)) }
-                if gridBellM(meta) == 1 { if bellMode == "visual" { bell = 1 } }   // 'off' = ignore
-                let sc = gridScrolledM(meta)
-                if len(sc) > 0 {
-                    scrollback = scrollback + sc
-                    let cap = sbCap * 200          // ~bytes budget for sbCap lines
-                    if len(scrollback) > cap { scrollback = substring(scrollback, len(scrollback) - cap, len(scrollback)) }
-                }
+        if wantNew == 1 && tabCount < 12 {
+            sessions = envSet(sessions, "" + tabCount, sessNew(cols, trows, shell, term))
+            active = tabCount  tabCount = tabCount + 1  dirty = 1
+        }
+        if switchTo > 0 - 1 {
+            let na = switchTo  if na < 0 { na = tabCount - 1 }  if na >= tabCount { na = 0 }
+            active = na  dirty = 1
+        }
+        if wantClose == 1 {
+            let cs = envGet(sessions, "" + active)
+            exec("kill -9 " + envGet(cs, "pid") + " 2>/dev/null")   // SIGKILL the shell
+            fdClose(envGet(cs, "m"))
+            if tabCount <= 1 { running = 0 }                        // last tab -> quit
+            else {                                                  // splice the tab out + renumber (don't wait on the reap)
+                let ci = active
+                while ci < tabCount - 1 { sessions = envSet(sessions, "" + ci, envGet(sessions, "" + (ci + 1)))  ci = ci + 1 }
+                tabCount = tabCount - 1
+                if active >= tabCount { active = tabCount - 1 }
                 dirty = 1
             }
-            pending = substring(chunk, cut, len(chunk))
-            quiet = 0
-        } else {
-            quiet = quiet + 1
-            if quiet >= 2 && len(pending) > 0 { meta = gridFeedB(gb, ab, bb, ub, meta, pending, cols, rows)  pending = ""  dirty = 1 }
         }
 
-        // 3) shell exited?
-        if waitChild(childPid) != 0 { running = 0 }
+        // ── pump every tab (background tabs keep running) ──
+        let anyDirty = 0
+        let pi = 0
+        while pi < tabCount {
+            let ps = sessPump(envGet(sessions, "" + pi), cols, trows, pal, sbCap, bellMode)
+            if envGet(ps, "dirty") == 1 { anyDirty = 1  if pi == active { dirty = 1 } }
+            sessions = envSet(sessions, "" + pi, ps)
+            pi = pi + 1
+        }
+
+        // ── reap dead children + compact the session list ──
+        let newSess = envNew()  let nc = 0  let na3 = active
+        let ck = 0
+        while ck < tabCount {
+            let ks = envGet(sessions, "" + ck)
+            if waitChild(envGet(ks, "pid")) == 0 {
+                newSess = envSet(newSess, "" + nc, ks)
+                if ck == active { na3 = nc }
+                nc = nc + 1
+            } else { fdClose(envGet(ks, "m"))  if ck == active { na3 = nc } }
+            ck = ck + 1
+        }
+        if nc == 0 { running = 0 }
+        else {
+            if nc != tabCount { dirty = 1 }
+            sessions = newSess  tabCount = nc  active = na3
+            if active >= tabCount { active = tabCount - 1 }  if active < 0 { active = 0 }
+        }
+
+        // ── reload the active tab for rendering + push its title ──
+        act = envGet(sessions, "" + active)
+        gb = envGet(act, "gb")  ab = envGet(act, "ab")  bb = envGet(act, "bb")  ub = envGet(act, "ub")
+        meta = envGet(act, "meta")  scrollback = envGet(act, "scrollback")  bell = envGet(act, "bell")  scrollOff = envGet(act, "scrollOff")
+        selSR = envGet(act, "selSR")  selSC = envGet(act, "selSC")  selER = envGet(act, "selER")  selEC = envGet(act, "selEC")  hasSel = envGet(act, "hasSel")
+        let atitle = envGet(act, "title")
+        if atitle != lastTitle { lastTitle = atitle  wlSetTitle(fd, TOP, atitle)  wlCommit(fd, SURF) }
 
         // 4) present. Reuse ONE shared memfd/mmap/pool across frames (mmapShared
         // has no munmap, so a per-frame mapping leaked ~MBs/frame -> OOM crash).
@@ -895,9 +931,11 @@ just run {
                 fbSz = sz
             }
             let px = fbPx
-            if scrollOff > 0 { kDrawScrollback(px, W, H, font, scrollback, gb, cols, rows, scrollOff, bg, fg) }
-            else { kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, rows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal) }
+            if scrollOff > 0 { kDrawScrollback(px, W, H, font, scrollback, gb, cols, trows, scrollOff, bg, fg, 18) }
+            else { kDrawScreen(px, W, H, font, gb, ab, bb, ub, meta, cols, trows, bg, fg, bell, curColor, curStyle, hasSel, selSR, selSC, selER, selEC, pal, 18) }
+            kDrawTabBar(px, W, H, font, sessions, tabCount, active)
             let didFlash = bell  bell = 0
+            act = envSet(act, "bell", 0)  sessions = envSet(sessions, "" + active, act)   // consume the flash
             let buf = nextId  nextId = nextId + 1
             wlPoolCreateBuffer(fd, fbPool, buf, 0, W, H, stride, 1)
             wlSurfaceAttach(fd, SURF, buf, 0, 0)
@@ -911,11 +949,17 @@ just run {
         // adaptive poll: fdRead allocates its buffer every call (no GC), so spinning
         // at 8ms while idle is a slow leak. Back off to ~40ms after the shell goes
         // quiet; snap back to 8ms the moment data flows (keeps typing responsive).
-        if quiet > 3 { sleepUs(0, 40000) } else { sleepUs(0, 8000) }
+        if anyDirty == 0 { sleepUs(0, 40000) } else { sleepUs(0, 8000) }
     }
-    // clean shutdown: closing the pty master hangs up the shell (SIGHUP); drop
+    // clean shutdown: closing every pty master hangs up its shell (SIGHUP); drop
     // the wayland connection so the surface is destroyed (no orphan window).
-    fdClose(m)
+    let qi = 0
+    while qi < tabCount {
+        let qs = envGet(sessions, "" + qi)
+        exec("kill -9 " + envGet(qs, "pid") + " 2>/dev/null")   // fish ignores PTY-hangup SIGHUP -> kill explicitly
+        fdClose(envGet(qs, "m"))
+        qi = qi + 1
+    }
     sockClose(fd)
     emit 0
 }
