@@ -7,7 +7,7 @@ or portable terminal engine (`term.k`).
 
 The current host provides:
 
-- independent PowerShell/ConPTY tabs with visible create, switch, and close controls;
+- independent PowerShell/ConPTY tabs and nested split panes;
 - PowerShell 7 by default, then Windows PowerShell, with Command Prompt only as
   a compatibility fallback;
 - a VT grid with ANSI/256/truecolor, alternate-screen, cursor, resize, and
@@ -57,8 +57,11 @@ override, STEM searches for `pwsh.exe`, then Windows PowerShell, and uses
 | Ctrl+Shift+C / Ctrl+Shift+V | Copy selection / bracketed paste |
 | Ctrl+Shift+A | Select the visible viewport |
 | Ctrl+Shift+F | Find across scrollback and the live grid |
-| Ctrl+Shift+T / Ctrl+Shift+W | New tab / close active tab |
+| Ctrl+Shift+T / Ctrl+Shift+W | New tab / close active pane (or its sole tab) |
 | Ctrl+Tab / Ctrl+Shift+Tab | Next / previous tab |
+| Alt+Shift+Plus / Alt+Shift+Minus | Split active pane right / down |
+| Alt+Arrow | Focus the pane in that direction |
+| Alt+Shift+Enter | Zoom / restore the active pane |
 | Enter / Shift+Enter in find | Next / previous match |
 
 ## Configuration
@@ -79,7 +82,7 @@ Core settings include:
 
 ```ini
 theme = krypton
-title = STEM - Krypton Terminal
+title = STEM
 shell =
 working_directory = ~
 term = xterm-256color
@@ -105,6 +108,10 @@ foreground = #D8DAD4
 selection_background = #3A2A60
 accent = #8B5CF6
 opacity = 1.0
+
+unfocused_pane_opacity = 0.82
+split_divider_color = #8B5CF6
+focus_follows_mouse = false
 ```
 
 `opacity` accepts `0.2` through `1.0`. The temporary Windows host applies

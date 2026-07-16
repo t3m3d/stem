@@ -19,7 +19,7 @@ and also treats Windows as a first-class platform.
 | Scrollback + find | Yes | Yes | Yes | Yes | Prompt navigation |
 | Selection + clipboard | Rich word/line/command selection | Yes | Yes | Viewport word/line selection | Cross-history selection |
 | Mouse + focus reporting | Yes | Yes | Yes | Not yet | Windows SGR 1006 + focus events |
-| Multiple windows / tabs / splits | Yes | Yes | Single session | Independent tabs | Windows splits, then Linux tabs/splits |
+| Multiple windows / tabs / splits | Yes | Yes | Single session | Tabs + nested splits | Layout persistence, then Linux tabs/splits |
 | Persistent configuration / themes | Extensive | Yes | Yes | Expanded .conf + visual hot reload | Shared schema + named themes |
 | Native UI | SwiftUI/AppKit + GTK | Cocoa | Wayland | WPF | Preserve native platform surfaces |
 | GPU rendering | Metal / OpenGL | CPU/native text | CPU framebuffer | CPU WPF | Renderer command IR + platform GPU backends |
@@ -37,7 +37,7 @@ and also treats Windows as a first-class platform.
 ### P0 — daily-driver parity
 
 1. Complete Windows scrollback, selection, clipboard, and configuration.
-2. Extend the Windows session-tab host with pane splitting and layout persistence.
+2. Persist Windows tabs, pane trees, and working directories.
 3. Add Windows mouse/focus reporting and robust resize/reflow behavior.
 4. Bring Linux window/tab/split organization up to the macOS frontend.
 

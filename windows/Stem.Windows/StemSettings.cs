@@ -26,7 +26,7 @@ public sealed record StemSettings
 # Set STEM_CONF to load another file. Restart for shell/session changes.
 
 theme = krypton
-title = STEM - Krypton Terminal
+title = STEM
 
 # Shell/session. Leave shell blank for the platform default.
 shell =
@@ -86,6 +86,11 @@ opacity = 1.0
 unfocused_pane_opacity = 0.82
 split_divider_color = #8B5CF6
 focus_follows_mouse = false
+restore_session = true
+
+# GUI-managed terminal profiles. Dotted profile keys are portable.
+default_profile = default
+
 """;
 
     public static string DefaultWorkingDirectory =>
@@ -95,7 +100,7 @@ focus_follows_mouse = false
     public string WorkingDirectory { get; init; } = DefaultWorkingDirectory;
     public string Term { get; init; } = "xterm-256color";
     public string Theme { get; init; } = "krypton";
-    public string WindowTitle { get; init; } = "STEM - Krypton Terminal";
+    public string WindowTitle { get; init; } = "STEM";
     public int Columns { get; init; } = 117;
     public int Rows { get; init; } = 30;
     public string FontFamily { get; init; } = DefaultFontFamily;
@@ -118,6 +123,9 @@ focus_follows_mouse = false
     public TerminalColor[] AnsiPalette { get; init; } = DefaultAnsiPalette();
     public bool CopyOnSelect { get; init; }
     public bool ConfirmClose { get; init; }
+    public bool RestoreSession { get; init; } = true;
+    public string DefaultProfile { get; init; } = "default";
+    public IReadOnlyList<StemProfile> Profiles { get; init; } = [];
 
     public static string CanonicalConfigPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -173,13 +181,19 @@ focus_follows_mouse = false
                 palette[index] = GetColor(values, $"color{index}", palette[index]);
             }
 
+            var windowTitle = Get(values, "title", "STEM");
+            if (string.Equals(windowTitle, "STEM - Krypton Terminal", StringComparison.OrdinalIgnoreCase))
+            {
+                windowTitle = "STEM";
+            }
+
             return new StemSettings
             {
                 Shell = Get(values, "shell", string.Empty, allowEmpty: true),
                 WorkingDirectory = Get(values, "working_directory", DefaultWorkingDirectory),
                 Term = Get(values, "term", "xterm-256color"),
                 Theme = Get(values, "theme", "krypton"),
-                WindowTitle = Get(values, "title", "STEM - Krypton Terminal"),
+                WindowTitle = windowTitle,
                 Columns = GetInt(values, "cols", 117, 20, 400),
                 Rows = GetInt(values, "rows", 30, 5, 200),
                 FontFamily = Get(values, "font_family", Get(values, "font", DefaultFontFamily)),
@@ -201,7 +215,10 @@ focus_follows_mouse = false
                 AccentColor = GetColor(values, "accent", new TerminalColor(139, 92, 246)),
                 AnsiPalette = palette,
                 CopyOnSelect = GetBool(values, "copy_on_select", false),
-                ConfirmClose = GetBool(values, "confirm_close", false)
+                ConfirmClose = GetBool(values, "confirm_close", false),
+                RestoreSession = GetBool(values, "restore_session", true),
+                DefaultProfile = Get(values, "default_profile", "default"),
+                Profiles = GetProfiles(values)
             };
         }
         catch (IOException)
@@ -293,6 +310,52 @@ focus_follows_mouse = false
             values[key] = value.Trim('"');
         }
         return values;
+    }
+
+    private static IReadOnlyList<StemProfile> GetProfiles(
+        IReadOnlyDictionary<string, string> values)
+    {
+        const string prefix = "profile.";
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in values.Keys)
+        {
+            if (!key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var tail = key[prefix.Length..];
+            var separator = tail.IndexOf('.');
+            if (separator > 0)
+            {
+                ids.Add(tail[..separator]);
+            }
+        }
+
+        var profiles = new List<StemProfile>();
+        foreach (var id in ids.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+        {
+            var command = Get(values, $"profile.{id}.command", string.Empty, allowEmpty: true);
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                continue;
+            }
+
+            var kind = Get(values, $"profile.{id}.kind", "custom").ToLowerInvariant() switch
+            {
+                "shell" => StemProfileKind.Shell,
+                "wsl" => StemProfileKind.Wsl,
+                "ssh" => StemProfileKind.Ssh,
+                _ => StemProfileKind.Custom
+            };
+            profiles.Add(new StemProfile(
+                id,
+                Get(values, $"profile.{id}.name", id),
+                command,
+                Get(values, $"profile.{id}.working_directory", DefaultWorkingDirectory),
+                kind));
+        }
+        return profiles;
     }
 
     private static string Get(

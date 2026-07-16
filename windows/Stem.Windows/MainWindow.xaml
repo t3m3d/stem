@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Stem.Windows"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="STEM — Krypton Terminal"
+        Title="STEM"
         Width="1120"
         Height="740"
         MinWidth="620"
@@ -88,17 +88,12 @@
                          HorizontalAlignment="Center"
                          VerticalAlignment="Center" />
             </Border>
-            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-              <TextBlock Text="STEM"
-                         FontSize="14"
-                         FontWeight="SemiBold"
-                         Foreground="#F0F3F8" />
-              <TextBlock Text="KRYPTON TERMINAL"
-                         Margin="0,1,0,0"
-                         FontSize="8.5"
-                         FontWeight="SemiBold"
-                         Foreground="#768398" />
-            </StackPanel>
+            <TextBlock Text="STEM"
+                       Margin="10,0,0,0"
+                       VerticalAlignment="Center"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Foreground="#F0F3F8" />
           </StackPanel>
 
           <Border Grid.Column="1"
@@ -145,121 +140,7 @@
       </Border>
 
       <Grid Grid.Row="1" Margin="12,7,12,7">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition x:Name="WorkspaceColumn" Width="224" />
-          <ColumnDefinition x:Name="WorkspaceGapColumn" Width="8" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-
-        <Border x:Name="WorkspaceDeck"
-                Grid.Column="0"
-                CornerRadius="10"
-                BorderBrush="#4C8B5CF6"
-                BorderThickness="1"
-                Background="#0A0F19">
-          <Border.Resources>
-            <Style x:Key="WorkspaceActionStyle" TargetType="Button">
-              <Setter Property="Height" Value="28" />
-              <Setter Property="Margin" Value="0,4,0,0" />
-              <Setter Property="Padding" Value="8,0" />
-              <Setter Property="BorderBrush" Value="#35455F" />
-              <Setter Property="BorderThickness" Value="1" />
-              <Setter Property="Background" Value="#101827" />
-              <Setter Property="Foreground" Value="#AEB8C8" />
-              <Setter Property="FontSize" Value="9" />
-              <Setter Property="FontWeight" Value="SemiBold" />
-              <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-            </Style>
-          </Border.Resources>
-          <Grid Margin="10">
-            <Grid.RowDefinitions>
-              <RowDefinition Height="Auto" />
-              <RowDefinition Height="*" />
-              <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
-              <StackPanel>
-                <TextBlock Text="KRYPTON WORKSPACE"
-                           FontSize="10"
-                           FontWeight="Bold"
-                           Foreground="#C4A7FF" />
-                <TextBlock x:Name="WorkspaceSummary"
-                           Margin="0,3,0,0"
-                           Text="1 TAB  /  1 PANE"
-                           FontSize="8"
-                           Foreground="#68758A" />
-              </StackPanel>
-              <Button Grid.Column="1"
-                      Width="24"
-                      Height="24"
-                      Padding="0"
-                      Content="‹"
-                      ToolTip="Collapse workspace deck (Ctrl+B)"
-                      BorderBrush="#35455F"
-                      BorderThickness="1"
-                      Background="#101827"
-                      Foreground="#C4A7FF"
-                      FocusVisualStyle="{x:Null}"
-                      Click="OnToggleWorkspaceClick" />
-            </Grid>
-
-            <ScrollViewer Grid.Row="1"
-                          Margin="0,10,0,8"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-              <StackPanel x:Name="WorkspacePaneList" />
-            </ScrollViewer>
-
-            <StackPanel Grid.Row="2">
-              <Button Style="{StaticResource WorkspaceActionStyle}"
-                      Content="+  NEW TAB"
-                      Click="OnNewTabClick" />
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="6" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Button Style="{StaticResource WorkspaceActionStyle}"
-                        Content="↔  SPLIT"
-                        Click="OnSplitRightClick" />
-                <Button Grid.Column="2"
-                        Style="{StaticResource WorkspaceActionStyle}"
-                        Content="↕  SPLIT"
-                        Click="OnSplitDownClick" />
-              </Grid>
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="6" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Button Style="{StaticResource WorkspaceActionStyle}"
-                        Content="□  ZOOM"
-                        Click="OnTogglePaneZoomClick" />
-                <Button Grid.Column="2"
-                        Style="{StaticResource WorkspaceActionStyle}"
-                        Content="⌕  FIND"
-                        Click="OnFindClick" />
-              </Grid>
-              <Button Style="{StaticResource WorkspaceActionStyle}"
-                      Content="⚙  OPEN STEM.CONF"
-                      Click="OnOpenConfigClick" />
-              <TextBlock Margin="0,8,0,0"
-                         Text="LIVE SESSION CONTROL PLANE"
-                         HorizontalAlignment="Center"
-                         FontSize="7.5"
-                         Foreground="#4F5C70" />
-            </StackPanel>
-          </Grid>
-        </Border>
-
-        <Border Grid.Column="2"
+        <Border
                 CornerRadius="10"
                 BorderThickness="1"
                 Background="#05070C">
@@ -332,54 +213,46 @@
                           Height="24"
                           Margin="5,0,0,0"
                           Padding="0"
-                          Content="↔"
-                          ToolTip="Split right (Alt+Shift++)"
+                          Content="⌄"
+                          ToolTip="Terminal options"
                           BorderBrush="#33415A"
                           BorderThickness="1"
                           Background="#101827"
                           Foreground="#C4A7FF"
                           FontSize="12"
                           FocusVisualStyle="{x:Null}"
-                          Click="OnSplitRightClick" />
-                  <Button Width="28"
-                          Height="24"
-                          Margin="5,0,0,0"
-                          Padding="0"
-                          Content="↕"
-                          ToolTip="Split down (Alt+Shift+-)"
-                          BorderBrush="#33415A"
-                          BorderThickness="1"
-                          Background="#101827"
-                          Foreground="#C4A7FF"
-                          FontSize="12"
-                          FocusVisualStyle="{x:Null}"
-                          Click="OnSplitDownClick" />
-                  <Button Width="28"
-                          Height="24"
-                          Margin="5,0,0,0"
-                          Padding="0"
-                          Content="×"
-                          ToolTip="Close active pane (Ctrl+Shift+W)"
-                          BorderBrush="#33415A"
-                          BorderThickness="1"
-                          Background="#101827"
-                          Foreground="#AEB8C8"
-                          FontSize="12"
-                          FocusVisualStyle="{x:Null}"
-                          Click="OnClosePaneClick" />
-                  <Button Width="28"
-                          Height="24"
-                          Margin="5,0,0,0"
-                          Padding="0"
-                          Content="⌕"
-                          ToolTip="Find in terminal (Ctrl+Shift+F)"
-                          BorderBrush="#33415A"
-                          BorderThickness="1"
-                          Background="#101827"
-                          Foreground="#AEB8C8"
-                          FontSize="13"
-                          FocusVisualStyle="{x:Null}"
-                          Click="OnFindClick" />
+                          Click="OnSessionMenuClick">
+                    <Button.ContextMenu>
+                      <ContextMenu Background="#0D1420"
+                                   Foreground="#D8DAD4"
+                                   BorderBrush="#5E4296"
+                                   BorderThickness="1"
+                                   Padding="4">
+                        <MenuItem Header="New tab"
+                                  InputGestureText="Ctrl+Shift+T"
+                                  Click="OnNewTabClick" />
+                        <Separator />
+                        <MenuItem Header="Split right"
+                                  InputGestureText="Alt+Shift+Plus"
+                                  Click="OnSplitRightClick" />
+                        <MenuItem Header="Split down"
+                                  InputGestureText="Alt+Shift+Minus"
+                                  Click="OnSplitDownClick" />
+                        <MenuItem Header="Zoom / restore pane"
+                                  InputGestureText="Alt+Shift+Enter"
+                                  Click="OnTogglePaneZoomClick" />
+                        <MenuItem Header="Close pane"
+                                  InputGestureText="Ctrl+Shift+W"
+                                  Click="OnClosePaneClick" />
+                        <Separator />
+                        <MenuItem Header="Find"
+                                  InputGestureText="Ctrl+Shift+F"
+                                  Click="OnFindClick" />
+                        <MenuItem Header="Settings..."
+                                  Click="OnSettingsClick" />
+                      </ContextMenu>
+                    </Button.ContextMenu>
+                  </Button>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2"
@@ -492,20 +365,10 @@
               CornerRadius="0,0,11,11">
         <Grid Margin="14,0">
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
-          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <TextBlock Text="◆"
-                       Margin="0,0,7,0"
-                       FontSize="8"
-                       Foreground="#8B5CF6" />
-            <TextBlock Text="KRYPTON THEME"
-                       FontSize="8.5"
-                       FontWeight="SemiBold"
-                       Foreground="#7F8A9D" />
-          </StackPanel>
           <TextBlock x:Name="ScrollbackStatus"
                      Grid.Column="1"
                      Text="LIVE"
@@ -516,6 +379,7 @@
           <TextBlock x:Name="TerminalDimensions"
                      Grid.Column="2"
                      Text="120 × 40"
+                     HorizontalAlignment="Right"
                      VerticalAlignment="Center"
                      FontFamily="Cascadia Mono, Consolas"
                      FontSize="9"

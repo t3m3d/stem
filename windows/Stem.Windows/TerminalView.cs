@@ -264,6 +264,13 @@ public sealed class TerminalView : Control
         }
     }
 
+    public void SelectViewport()
+    {
+        _selectionStart = new SelectionPoint(0, 0);
+        _selectionEnd = new SelectionPoint(Buffer.Rows - 1, Buffer.Columns - 1);
+        InvalidateVisual();
+    }
+
     protected override void OnRender(DrawingContext drawingContext)
     {
         base.OnRender(drawingContext);
@@ -443,9 +450,7 @@ public sealed class TerminalView : Control
 
         if (control && shift && e.Key == Key.A)
         {
-            _selectionStart = new SelectionPoint(0, 0);
-            _selectionEnd = new SelectionPoint(Buffer.Rows - 1, Buffer.Columns - 1);
-            InvalidateVisual();
+            SelectViewport();
             e.Handled = true;
             return;
         }
@@ -536,7 +541,7 @@ public sealed class TerminalView : Control
         base.OnPreviewKeyDown(e);
     }
 
-    private void PasteClipboard()
+    public void PasteClipboard()
     {
         if (!Clipboard.ContainsText())
         {
