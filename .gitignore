@@ -6,6 +6,7 @@ stem.exe
 .work-linux/
 build-linux/
 *.log
+*.msix
 
 stem-gui
 stem
