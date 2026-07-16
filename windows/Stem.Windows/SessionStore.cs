@@ -114,7 +114,7 @@ public static class StemSessionStore
             return true;
         }
         catch (Exception ex) when (
-            ex is IOException or UnauthorizedAccessException or JsonException)
+            ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         {
             return false;
         }

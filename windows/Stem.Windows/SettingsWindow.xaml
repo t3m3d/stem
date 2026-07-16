@@ -162,7 +162,7 @@
                          FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" />
             </Grid>
             <TextBlock Margin="170,0,0,20" FontSize="9" Foreground="{DynamicResource KryptonSubtleBrush}"
-                       Text="The app theme changes STEM chrome, menus, and Settings. Terminal colors remain independent and editable below." />
+                       Text="Selecting a mode loads its matching Krypton terminal palette; every color remains editable below." />
 
             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Typography and spacing" />
             <Grid Margin="0,0,0,8">

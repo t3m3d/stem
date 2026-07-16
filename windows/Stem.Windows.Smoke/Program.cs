@@ -161,6 +161,9 @@ static void TestSettings()
 
         File.WriteAllText(path, "title = STEM - Krypton Terminal");
         Assert(StemSettings.Load(path).WindowTitle == "STEM", "legacy default title is cleaned up");
+
+        File.WriteAllText(path, @"shell = C:\Program Files\kryofetch\kryofetch.exe");
+        Assert(StemSettings.Load(path).Shell.Length == 0, "Kryofetch is migrated from shell command to PowerShell startup output");
     }
     finally
     {
@@ -174,6 +177,7 @@ static void TestSettings()
         Assert(StemSettings.EnsureDefaultFile(generatedPath), "default stem.conf is created");
         var generated = File.ReadAllText(generatedPath);
         Assert(generated.Contains("opacity = 1.0", StringComparison.Ordinal), "generated config documents transparency");
+        Assert(generated.Contains("background = #160A2A", StringComparison.Ordinal), "generated config uses the Krypton violet background");
         Assert(generated.Contains("color15 = #FFFFFF", StringComparison.Ordinal), "generated config documents ANSI colors");
     }
     finally
@@ -189,6 +193,10 @@ static void TestThemesAndSessionStore()
     Assert(KryptonTheme.Normalize("krypton") == KryptonTheme.Dark, "legacy krypton theme maps to dark");
     Assert(KryptonTheme.IsLight("krypton-light"), "light theme is recognized");
     Assert(!KryptonTheme.IsLight("krypton-dark"), "dark and light chrome modes stay distinct");
+    Assert(KryptonTheme.TerminalPalette(KryptonTheme.Dark).Background == new TerminalColor(22, 10, 42),
+        "dark Krypton terminal uses a violet background");
+    Assert(KryptonTheme.TerminalPalette(KryptonTheme.Light).Background == new TerminalColor(238, 230, 255),
+        "light Krypton terminal uses a lavender background");
 
     var directory = Path.Combine(Path.GetTempPath(), $"stem-session-{Guid.NewGuid():N}");
     var path = Path.Combine(directory, "session.json");

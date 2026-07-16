@@ -14,7 +14,7 @@
     <SolidColorBrush x:Key="KryptonBackgroundBrush" Color="#10081D" />
     <SolidColorBrush x:Key="KryptonPanelBrush" Color="#180C2A" />
     <SolidColorBrush x:Key="KryptonShellBrush" Color="#260D46" />
-    <SolidColorBrush x:Key="KryptonTerminalChromeBrush" Color="#07050C" />
+    <SolidColorBrush x:Key="KryptonTerminalChromeBrush" Color="#160A2A" />
     <SolidColorBrush x:Key="KryptonFieldBrush" Color="#0B0712" />
     <SolidColorBrush x:Key="KryptonTextBrush" Color="#F0EBFA" />
     <SolidColorBrush x:Key="KryptonStrongTextBrush" Color="#FFFFFF" />
@@ -85,6 +85,7 @@
     </Style>
 
     <Style x:Key="KryptonContextMenuStyle" TargetType="{x:Type ContextMenu}">
+      <Setter Property="FontFamily" Value="Segoe UI" />
       <Setter Property="Background" Value="{DynamicResource KryptonMenuBrush}" />
       <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource KryptonBorderBrush}" />
@@ -112,6 +113,7 @@
     <Style TargetType="{x:Type ContextMenu}" BasedOn="{StaticResource KryptonContextMenuStyle}" />
 
     <Style TargetType="{x:Type MenuItem}">
+      <Setter Property="FontFamily" Value="Segoe UI" />
       <Setter Property="MinWidth" Value="210" />
       <Setter Property="Height" Value="31" />
       <Setter Property="Background" Value="Transparent" />

@@ -240,6 +240,14 @@ public partial class MainWindow : Window
     private StemSessionState CaptureSession()
     {
         var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+        if (!double.IsFinite(bounds.Left) ||
+            !double.IsFinite(bounds.Top) ||
+            !double.IsFinite(bounds.Width) ||
+            !double.IsFinite(bounds.Height))
+        {
+            var workArea = SystemParameters.WorkArea;
+            bounds = new Rect(workArea.Left, workArea.Top, 1120, 740);
+        }
         return new StemSessionState
         {
             ActiveTabIndex = Math.Max(0, _tabs.IndexOf(_activeTab!)),
@@ -274,7 +282,7 @@ public partial class MainWindow : Window
         var id = _nextTabId++;
         var title = new TextBlock
         {
-            Text = $"{id}  POWERSHELL",
+            Text = id.ToString(),
             Margin = new Thickness(8, 0, 5, 0),
             VerticalAlignment = VerticalAlignment.Center,
             FontSize = 8.5,
@@ -622,9 +630,6 @@ public partial class MainWindow : Window
         {
             return;
         }
-
-        ShellBadge.Text = pane.DisplayName.ToUpperInvariant();
-        WindowSessionTitle.Text = pane.WindowTitle;
         Title = $"{pane.WindowTitle} \u2014 {_settings.WindowTitle}";
         SetConnectionState(pane.StatusText, pane.StatusColor);
         TerminalDimensions.Text = $"{pane.Terminal.Columns} × {pane.Terminal.Rows}";
@@ -633,9 +638,12 @@ public partial class MainWindow : Window
 
     private void UpdateTabTitle(SessionTab tab)
     {
-        var pane = tab.ActivePane;
-        var paneCount = tab.Panes.Count > 1 ? $"  \u2022  {tab.Panes.Count} PANES" : string.Empty;
-        tab.TabTitle.Text = $"{tab.Id}  {pane.DisplayName.ToUpperInvariant()}{paneCount}";
+        var label = $"{tab.Id}  {tab.ActivePane.DisplayName}";
+        if (tab.Panes.Count > 1)
+        {
+            label += $"  \u00b7 {tab.Panes.Count}";
+        }
+        tab.TabTitle.Text = label;
     }
 
     private void UpdateTabStyles()

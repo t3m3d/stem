@@ -8,6 +8,7 @@
     <AssemblyName>stem</AssemblyName>
     <RootNamespace>Stem.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>stem.ico</ApplicationIcon>
     <Version>0.1.0</Version>
     <AssemblyTitle>STEM</AssemblyTitle>
     <Product>STEM Terminal</Product>

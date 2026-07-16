@@ -393,6 +393,18 @@ public partial class SettingsWindow : Window
         }
 
         var theme = SelectedTag(ThemeBox, KryptonTheme.Dark);
+        var palette = KryptonTheme.TerminalPalette(theme);
+        BackgroundColorBox.Text = Hex(palette.Background);
+        ForegroundColorBox.Text = Hex(palette.Foreground);
+        AccentColorBox.Text = Hex(palette.Accent);
+        SelectionColorBox.Text = Hex(palette.Selection);
+        CursorColorBox.Text = Hex(palette.Cursor);
+        SplitDividerColorBox.Text = Hex(palette.SplitDivider);
+        for (var index = 0; index < _ansiBoxes.Count && index < palette.Ansi.Length; index++)
+        {
+            _ansiBoxes[index].Text = Hex(palette.Ansi[index]);
+        }
+
         KryptonTheme.ApplyApplication(theme, OpacitySlider.Value);
         DarkWindowTheme.Apply(this, dark: !KryptonTheme.IsLight(theme), OpacitySlider.Value);
         ThemeBadgeText.Text = KryptonTheme.IsLight(theme) ? "KRYPTON LIGHT" : "KRYPTON DARK";

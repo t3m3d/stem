@@ -55,8 +55,8 @@ cursor_blink_ms = 530
 cursor_color = #8B5CF6
 
 # Krypton palette.
-background = #05070C
-foreground = #D8DAD4
+background = #160A2A
+foreground = #F4EEFF
 selection_background = #3A2A60
 accent = #8B5CF6
 
@@ -78,7 +78,7 @@ color13 = #D670D6
 color14 = #29B8DB
 color15 = #FFFFFF
 
-# Whole-window transparency on the temporary Windows host.
+# Background-only transparency. Text, cursor, and controls remain opaque.
 # 1.0 is opaque; 0.2 is the minimum.
 opacity = 1.0
 
@@ -115,8 +115,8 @@ default_profile = default
     public int CursorBlinkMilliseconds { get; init; } = 530;
     public StemCursorStyle CursorStyle { get; init; } = StemCursorStyle.Bar;
     public StemBellMode Bell { get; init; } = StemBellMode.Visual;
-    public TerminalColor BackgroundColor { get; init; } = new(5, 7, 12);
-    public TerminalColor ForegroundColor { get; init; } = new(216, 218, 212);
+    public TerminalColor BackgroundColor { get; init; } = new(22, 10, 42);
+    public TerminalColor ForegroundColor { get; init; } = new(244, 238, 255);
     public TerminalColor CursorColor { get; init; } = new(139, 92, 246);
     public TerminalColor SelectionColor { get; init; } = new(58, 42, 96);
     public TerminalColor AccentColor { get; init; } = new(139, 92, 246);
@@ -161,6 +161,14 @@ default_profile = default
             }
 
             var values = Parse(File.ReadAllLines(path));
+            var shell = Get(values, "shell", string.Empty, allowEmpty: true);
+            if (shell.Contains("kryofetch", StringComparison.OrdinalIgnoreCase))
+            {
+                // Kryofetch is startup output, not an interactive shell. PowerShell profiles may still run it.
+                shell = string.Empty;
+            }
+            var theme = Get(values, "theme", "krypton");
+            var themePalette = KryptonTheme.TerminalPalette(theme);
             var scrollback = GetInt(
                 values,
                 "scrollback_lines",
@@ -170,12 +178,21 @@ default_profile = default
             var background = GetColor(
                 values,
                 "background",
-                GetColor(values, "bg", new TerminalColor(5, 7, 12)));
+                GetColor(values, "bg", themePalette.Background));
             var foreground = GetColor(
                 values,
                 "foreground",
-                GetColor(values, "fg", new TerminalColor(216, 218, 212)));
-            var palette = DefaultAnsiPalette();
+                GetColor(values, "fg", themePalette.Foreground));
+            // Migrate the original neutral-black preview defaults to the real Krypton palette.
+            if (background == new TerminalColor(5, 7, 12))
+            {
+                background = themePalette.Background;
+            }
+            if (foreground == new TerminalColor(216, 218, 212))
+            {
+                foreground = themePalette.Foreground;
+            }
+            var palette = themePalette.Ansi.ToArray();
             for (var index = 0; index < palette.Length; index++)
             {
                 palette[index] = GetColor(values, $"color{index}", palette[index]);
@@ -189,10 +206,10 @@ default_profile = default
 
             return new StemSettings
             {
-                Shell = Get(values, "shell", string.Empty, allowEmpty: true),
+                Shell = shell,
                 WorkingDirectory = Get(values, "working_directory", DefaultWorkingDirectory),
                 Term = Get(values, "term", "xterm-256color"),
-                Theme = Get(values, "theme", "krypton"),
+                Theme = theme,
                 WindowTitle = windowTitle,
                 Columns = GetInt(values, "cols", 117, 20, 400),
                 Rows = GetInt(values, "rows", 30, 5, 200),
@@ -202,7 +219,7 @@ default_profile = default
                 LineSpacing = GetDouble(values, "line_spacing", 0, -4, 20),
                 Opacity = GetDouble(values, "opacity", 1, 0.2, 1),
                 UnfocusedPaneOpacity = GetDouble(values, "unfocused_pane_opacity", 0.82, 0.15, 1),
-                SplitDividerColor = GetColor(values, "split_divider_color", new TerminalColor(139, 92, 246)),
+                SplitDividerColor = GetColor(values, "split_divider_color", themePalette.SplitDivider),
                 FocusFollowsMouse = GetBool(values, "focus_follows_mouse", false),
                 ScrollbackLines = scrollback,
                 CursorBlinkMilliseconds = GetInt(values, "cursor_blink_ms", 530, 0, 5_000),
@@ -210,9 +227,9 @@ default_profile = default
                 Bell = GetBellMode(values, "bell", StemBellMode.Visual),
                 BackgroundColor = background,
                 ForegroundColor = foreground,
-                CursorColor = GetColor(values, "cursor_color", new TerminalColor(139, 92, 246)),
-                SelectionColor = GetColor(values, "selection_background", new TerminalColor(58, 42, 96)),
-                AccentColor = GetColor(values, "accent", new TerminalColor(139, 92, 246)),
+                CursorColor = GetColor(values, "cursor_color", themePalette.Cursor),
+                SelectionColor = GetColor(values, "selection_background", themePalette.Selection),
+                AccentColor = GetColor(values, "accent", themePalette.Accent),
                 AnsiPalette = palette,
                 CopyOnSelect = GetBool(values, "copy_on_select", false),
                 ConfirmClose = GetBool(values, "confirm_close", false),

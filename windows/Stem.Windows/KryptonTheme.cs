@@ -3,6 +3,15 @@ using System.Windows.Media;
 
 namespace Stem.Windows;
 
+public sealed record KryptonTerminalPalette(
+    TerminalColor Background,
+    TerminalColor Foreground,
+    TerminalColor Accent,
+    TerminalColor Selection,
+    TerminalColor Cursor,
+    TerminalColor SplitDivider,
+    TerminalColor[] Ansi);
+
 public static class KryptonTheme
 {
     public const string Dark = "krypton-dark";
@@ -15,6 +24,21 @@ public static class KryptonTheme
     };
 
     public static bool IsLight(string? value) => Normalize(value) == Light;
+
+    public static KryptonTerminalPalette TerminalPalette(string? theme) => IsLight(theme)
+        ? new KryptonTerminalPalette(
+            new(238, 230, 255), new(39, 20, 61), new(124, 58, 237),
+            new(211, 193, 255), new(124, 58, 237), new(139, 92, 246),
+            [
+                new(43, 26, 64), new(185, 35, 73), new(5, 120, 84), new(143, 91, 0),
+                new(35, 82, 171), new(131, 51, 143), new(4, 105, 126), new(101, 87, 119),
+                new(120, 102, 140), new(211, 43, 85), new(8, 143, 99), new(161, 105, 0),
+                new(52, 105, 199), new(155, 65, 166), new(15, 134, 154), new(39, 20, 61)
+            ])
+        : new KryptonTerminalPalette(
+            new(22, 10, 42), new(244, 238, 255), new(139, 92, 246),
+            new(61, 40, 107), new(139, 92, 246), new(139, 92, 246),
+            StemSettings.DefaultAnsiPalette());
 
 
     public static void ApplyApplication(string? theme, double backgroundOpacity = 1)
@@ -30,7 +54,7 @@ public static class KryptonTheme
         SetBrush(resources, "KryptonBackgroundBrush", light ? 0xF8F5FF : 0x10081D, opacity);
         SetBrush(resources, "KryptonPanelBrush", light ? 0xF0E9FF : 0x180C2A, opacity);
         SetBrush(resources, "KryptonShellBrush", light ? 0xE9DDFF : 0x260D46, opacity);
-        SetBrush(resources, "KryptonTerminalChromeBrush", light ? 0xFFFFFF : 0x07050C, opacity);
+        SetBrush(resources, "KryptonTerminalChromeBrush", light ? 0xEEE6FF : 0x160A2A, opacity);
         SetBrush(resources, "KryptonFieldBrush", light ? 0xFFFFFF : 0x0B0712, Math.Max(0.72, opacity));
         SetBrush(resources, "KryptonTextBrush", light ? 0x241933 : 0xF0EBFA);
         SetBrush(resources, "KryptonStrongTextBrush", light ? 0x170D26 : 0xFFFFFF);
