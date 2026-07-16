@@ -13,20 +13,21 @@ internal static class DarkWindowTheme
     private const int SystemBackdropType = 38;
     private const int RoundCorner = 2;
     private const int MainWindowBackdrop = 2;
+    private const int TransientWindowBackdrop = 3;
 
-    public static void Apply(Window window, bool dark = true)
+    public static void Apply(Window window, bool dark = true, double backgroundOpacity = 1)
     {
         window.Background = Brushes.Transparent;
         if (new WindowInteropHelper(window).Handle != IntPtr.Zero)
         {
-            ApplyNow(window, dark);
+            ApplyNow(window, dark, backgroundOpacity);
             return;
         }
 
-        window.SourceInitialized += (_, _) => ApplyNow(window, dark);
+        window.SourceInitialized += (_, _) => ApplyNow(window, dark, backgroundOpacity);
     }
 
-    private static void ApplyNow(Window window, bool dark)
+    private static void ApplyNow(Window window, bool dark, double backgroundOpacity)
     {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763))
         {
@@ -60,7 +61,7 @@ internal static class DarkWindowTheme
         {
             var corner = RoundCorner;
             _ = DwmSetWindowAttribute(handle, WindowCornerPreference, ref corner, Marshal.SizeOf<int>());
-            var backdrop = MainWindowBackdrop;
+            var backdrop = backgroundOpacity < 0.995 ? TransientWindowBackdrop : MainWindowBackdrop;
             _ = DwmSetWindowAttribute(handle, SystemBackdropType, ref backdrop, Marshal.SizeOf<int>());
         }
     }

@@ -37,6 +37,8 @@ public sealed record StemSessionState
 {
     public int Version { get; init; } = 1;
     public int ActiveTabIndex { get; init; }
+    public double WindowLeft { get; init; }
+    public double WindowTop { get; init; }
     public double WindowWidth { get; init; }
     public double WindowHeight { get; init; }
     public bool Maximized { get; init; }
@@ -51,11 +53,20 @@ public static class StemSessionStore
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
-    public static string SessionPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".config",
-        "stem",
-        "session.json");
+    public static string SessionPath
+    {
+        get
+        {
+            var overridePath = Environment.GetEnvironmentVariable("STEM_SESSION");
+            return !string.IsNullOrWhiteSpace(overridePath)
+                ? Environment.ExpandEnvironmentVariables(overridePath)
+                : Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".config",
+                    "stem",
+                    "session.json");
+        }
+    }
 
     public static StemSessionState? Load(string? path = null)
     {

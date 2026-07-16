@@ -3,15 +3,6 @@ using System.Windows.Media;
 
 namespace Stem.Windows;
 
-public sealed record KryptonTerminalPalette(
-    TerminalColor Background,
-    TerminalColor Foreground,
-    TerminalColor Accent,
-    TerminalColor Selection,
-    TerminalColor Cursor,
-    TerminalColor SplitDivider,
-    TerminalColor[] Ansi);
-
 public static class KryptonTheme
 {
     public const string Dark = "krypton-dark";
@@ -25,20 +16,6 @@ public static class KryptonTheme
 
     public static bool IsLight(string? value) => Normalize(value) == Light;
 
-    public static KryptonTerminalPalette TerminalPalette(string? theme) => IsLight(theme)
-        ? new KryptonTerminalPalette(
-            new(250, 248, 255), new(36, 25, 51), new(124, 58, 237),
-            new(218, 204, 255), new(124, 58, 237), new(139, 92, 246),
-            [
-                new(43, 33, 58), new(198, 40, 78), new(8, 127, 91), new(148, 98, 0),
-                new(37, 89, 179), new(143, 62, 151), new(11, 114, 133), new(111, 101, 125),
-                new(129, 117, 143), new(220, 53, 94), new(10, 147, 105), new(168, 112, 0),
-                new(57, 115, 209), new(166, 79, 175), new(20, 145, 168), new(33, 24, 46)
-            ])
-        : new KryptonTerminalPalette(
-            new(5, 7, 12), new(216, 218, 212), new(139, 92, 246),
-            new(58, 42, 96), new(139, 92, 246), new(139, 92, 246),
-            StemSettings.DefaultAnsiPalette());
 
     public static void ApplyApplication(string? theme, double backgroundOpacity = 1)
     {
@@ -82,22 +59,24 @@ public static class KryptonTheme
         resources["KryptonFrameEndColor"] = ColorValue(light ? 0x6D28D9 : 0x6D28D9);
         resources["KryptonWavePrimaryColor"] = ColorValue(light ? 0x72FFFFFF : 0x58FFFFFF, alphaIncluded: true);
         resources["KryptonWaveSecondaryColor"] = ColorValue(light ? 0x55E9DDFF : 0x48C4A7FF, alphaIncluded: true);
+        SetBrush(resources, "KryptonWavePrimaryBrush", light ? 0x72FFFFFF : 0x58FFFFFF, alphaIncluded: true);
+        SetBrush(resources, "KryptonWaveSecondaryBrush", light ? 0x55E9DDFF : 0x48C4A7FF, alphaIncluded: true);
     }
 
-    private static void SetBrush(ResourceDictionary resources, string key, uint value, double opacity = 1) =>
+    private static void SetBrush(ResourceDictionary resources, string key, long value, double opacity = 1) =>
         resources[key] = new SolidColorBrush(ColorValue(value, opacity));
 
-    private static void SetBrush(ResourceDictionary resources, string key, uint value, bool alphaIncluded) =>
+    private static void SetBrush(ResourceDictionary resources, string key, long value, bool alphaIncluded) =>
         resources[key] = new SolidColorBrush(ColorValue(value, alphaIncluded));
 
-    private static Color ColorValue(uint value, double opacity) =>
+    private static Color ColorValue(long value, double opacity) =>
         Color.FromArgb(
             (byte)Math.Round(Math.Clamp(opacity, 0, 1) * 255),
             (byte)(value >> 16),
             (byte)(value >> 8),
             (byte)value);
 
-    private static Color ColorValue(uint value, bool alphaIncluded = false) => alphaIncluded
+    private static Color ColorValue(long value, bool alphaIncluded = false) => alphaIncluded
         ? Color.FromArgb((byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value)
         : Color.FromRgb((byte)(value >> 16), (byte)(value >> 8), (byte)value);
 }

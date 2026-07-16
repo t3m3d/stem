@@ -8,74 +8,69 @@
         MinHeight="600"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResizeWithGrip"
-        Background="#070A12"
-        Foreground="#D8DAD4">
+        Background="Transparent"
+        Foreground="{DynamicResource KryptonTextBrush}">
   <Window.Resources>
-    <SolidColorBrush x:Key="PanelBrush" Color="#0C121E" />
-    <SolidColorBrush x:Key="FieldBrush" Color="#05070C" />
-    <SolidColorBrush x:Key="BorderBrush" Color="#28364D" />
-    <SolidColorBrush x:Key="AccentBrush" Color="#8B5CF6" />
-    <SolidColorBrush x:Key="MutedBrush" Color="#7E899B" />
     <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap" /></Style>
     <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
       <Setter Property="Margin" Value="0,4,0,12" />
       <Setter Property="FontSize" Value="15" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Foreground" Value="#C4A7FF" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonAccentHighlightBrush}" />
     </Style>
     <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
       <Setter Property="Margin" Value="0,0,12,0" />
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="Foreground" Value="#AEB8C8" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
       <Setter Property="FontSize" Value="11" />
     </Style>
     <Style TargetType="TextBox">
       <Setter Property="Height" Value="30" />
       <Setter Property="Padding" Value="8,4" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
-      <Setter Property="Background" Value="{StaticResource FieldBrush}" />
-      <Setter Property="Foreground" Value="#EEF1F6" />
-      <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
-      <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+      <Setter Property="Background" Value="{DynamicResource KryptonFieldBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonStrongTextBrush}" />
+      <Setter Property="CaretBrush" Value="{DynamicResource KryptonAccentBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KryptonBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="SelectionBrush" Value="#6D8B5CF6" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource KryptonSelectionBrush}" />
     </Style>
     <Style TargetType="ComboBox">
       <Setter Property="Height" Value="30" />
       <Setter Property="Padding" Value="7,3" />
-      <Setter Property="Background" Value="{StaticResource FieldBrush}" />
-      <Setter Property="Foreground" Value="#EEF1F6" />
-      <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+      <Setter Property="Background" Value="{DynamicResource KryptonFieldBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonStrongTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KryptonBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style TargetType="CheckBox">
       <Setter Property="Margin" Value="0,7" />
-      <Setter Property="Foreground" Value="#D8DAD4" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
       <Setter Property="FontSize" Value="11" />
     </Style>
-    <Style TargetType="Slider"><Setter Property="Foreground" Value="{StaticResource AccentBrush}" /></Style>
+    <Style TargetType="Slider"><Setter Property="Foreground" Value="{DynamicResource KryptonAccentBrush}" /></Style>
     <Style x:Key="ActionButtonStyle" TargetType="Button">
       <Setter Property="Height" Value="34" />
       <Setter Property="MinWidth" Value="104" />
       <Setter Property="Margin" Value="8,0,0,0" />
       <Setter Property="Padding" Value="14,0" />
-      <Setter Property="Background" Value="#141D2B" />
-      <Setter Property="Foreground" Value="#D8DAD4" />
-      <Setter Property="BorderBrush" Value="#35455F" />
+      <Setter Property="Background" Value="{DynamicResource KryptonMenuBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KryptonBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="FontSize" Value="10" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     </Style>
     <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
-      <Setter Property="Background" Value="#5E35B1" />
+      <Setter Property="Background" Value="{DynamicResource KryptonAccentBrush}" />
       <Setter Property="Foreground" Value="White" />
-      <Setter Property="BorderBrush" Value="#A78BFA" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KryptonAccentHighlightBrush}" />
     </Style>
     <Style TargetType="TabItem">
-      <Setter Property="Foreground" Value="#AEB8C8" />
-      <Setter Property="Background" Value="#0A101A" />
-      <Setter Property="BorderBrush" Value="#28364D" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
+      <Setter Property="Background" Value="{DynamicResource KryptonPanelBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KryptonBorderBrush}" />
       <Setter Property="Padding" Value="16,8" />
       <Setter Property="FontSize" Value="10" />
       <Setter Property="FontWeight" Value="SemiBold" />
@@ -88,23 +83,36 @@
       <RowDefinition Height="*" />
       <RowDefinition Height="62" />
     </Grid.RowDefinitions>
-    <Border Grid.Row="0" Padding="22,0" Background="#0B111D" BorderBrush="#233047" BorderThickness="0,0,0,1">
-      <Grid>
+    <Border Grid.Row="0" Padding="22,0" BorderBrush="{DynamicResource KryptonBorderBrush}" BorderThickness="0,0,0,1">
+      <Border.Background>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+          <GradientStop Color="{DynamicResource KryptonShellStartColor}" Offset="0" />
+          <GradientStop Color="{DynamicResource KryptonShellMidColor}" Offset="0.56" />
+          <GradientStop Color="{DynamicResource KryptonShellEndColor}" Offset="1" />
+        </LinearGradientBrush>
+      </Border.Background>
+      <Grid ClipToBounds="True">
         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-        <Border Width="38" Height="38" CornerRadius="10" BorderBrush="#8B5CF6" BorderThickness="1" Background="#21163E">
+        <Path Grid.ColumnSpan="3" Margin="-30,3,-30,-5" Stretch="Fill" IsHitTestVisible="False"
+              Fill="{DynamicResource KryptonWaveSecondaryBrush}" Opacity="0.38"
+              Data="M 0,50 C 145,5 286,74 450,30 C 618,-14 771,65 935,22 C 1010,3 1072,7 1120,0 L 1120,72 L 0,72 Z" />
+        <Path Grid.ColumnSpan="3" Margin="-22,0,-22,2" Stretch="Fill" IsHitTestVisible="False"
+              Stroke="{DynamicResource KryptonWavePrimaryBrush}" StrokeThickness="1"
+              Data="M 0,46 C 145,8 292,68 454,28 C 618,-12 780,59 943,19 C 1014,2 1074,5 1120,0" />
+        <Border Width="38" Height="38" CornerRadius="10" BorderBrush="{DynamicResource KryptonAccentBrush}" BorderThickness="1" Background="{DynamicResource KryptonMenuSelectedBrush}">
           <TextBlock Text="K" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="16" FontWeight="Bold" Foreground="White" />
         </Border>
         <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-          <TextBlock Text="STEM SETTINGS" FontSize="15" FontWeight="SemiBold" Foreground="#F2F4F8" />
-          <TextBlock Text="GUI configuration with portable config-code output" Margin="0,3,0,0" FontSize="9" Foreground="#78859A" />
+          <TextBlock Text="STEM SETTINGS" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource KryptonTitleTextBrush}" />
+          <TextBlock Text="GUI configuration with portable config-code output" Margin="0,3,0,0" FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" />
         </StackPanel>
-        <Border Grid.Column="2" Padding="10,5" CornerRadius="10" BorderBrush="#4C8B5CF6" BorderThickness="1" Background="#15102A">
-          <TextBlock Text="KRYPTON THEME" FontSize="8" FontWeight="Bold" Foreground="#C4A7FF" />
+        <Border Grid.Column="2" Padding="10,5" CornerRadius="10" BorderBrush="{DynamicResource KryptonBorderBrush}" BorderThickness="1" Background="{DynamicResource KryptonMenuBrush}">
+          <TextBlock x:Name="ThemeBadgeText" Text="KRYPTON DARK" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource KryptonTitleTextBrush}" />
         </Border>
       </Grid>
     </Border>
 
-    <TabControl x:Name="SettingsTabs" Grid.Row="1" Margin="18,14,18,0" Background="#070A12" BorderBrush="#28364D" SelectionChanged="OnSettingsTabChanged">
+    <TabControl x:Name="SettingsTabs" Grid.Row="1" Margin="18,14,18,0" Background="{DynamicResource KryptonBackgroundBrush}" BorderBrush="{DynamicResource KryptonBorderBrush}" SelectionChanged="OnSettingsTabChanged">
       <TabItem Header="TERMINAL">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel Margin="20">
@@ -130,9 +138,9 @@
               <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="110" /><ColumnDefinition Width="48" /><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
               <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Grid size" />
               <TextBox x:Name="ColumnsBox" Grid.Column="1" />
-              <TextBlock Grid.Column="2" Text="×" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#78859A" />
+              <TextBlock Grid.Column="2" Text="×" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource KryptonMutedBrush}" />
               <TextBox x:Name="RowsBox" Grid.Column="3" />
-              <TextBlock Grid.Column="4" Margin="12,0,0,0" Text="columns × rows" VerticalAlignment="Center" FontSize="9" Foreground="#667388" />
+              <TextBlock Grid.Column="4" Margin="12,0,0,0" Text="columns × rows" VerticalAlignment="Center" FontSize="9" Foreground="{DynamicResource KryptonSubtleBrush}" />
             </Grid>
           </StackPanel>
         </ScrollViewer>
@@ -141,6 +149,21 @@
       <TabItem Header="APPEARANCE">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel Margin="20">
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Application theme" />
+            <Grid Margin="0,0,0,7">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="260" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Color mode" />
+              <ComboBox x:Name="ThemeBox" Grid.Column="1" SelectionChanged="OnThemeChanged">
+                <ComboBoxItem Content="Krypton Dark" Tag="krypton-dark" />
+                <ComboBoxItem Content="Krypton Light" Tag="krypton-light" />
+              </ComboBox>
+              <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                         Text="Changes preview immediately; Save &amp; Apply writes the portable theme key."
+                         FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" />
+            </Grid>
+            <TextBlock Margin="170,0,0,20" FontSize="9" Foreground="{DynamicResource KryptonSubtleBrush}"
+                       Text="The app theme changes STEM chrome, menus, and Settings. Terminal colors remain independent and editable below." />
+
             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Typography and spacing" />
             <Grid Margin="0,0,0,8">
               <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -149,23 +172,23 @@
             <Grid Margin="0,0,0,8">
               <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="110" /><ColumnDefinition Width="120" /><ColumnDefinition Width="110" /><ColumnDefinition Width="120" /><ColumnDefinition Width="110" /></Grid.ColumnDefinitions>
               <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Font size" /><TextBox x:Name="FontSizeBox" Grid.Column="1" />
-              <TextBlock Grid.Column="2" Margin="14,0,8,0" VerticalAlignment="Center" Text="Padding" Foreground="#AEB8C8" /><TextBox x:Name="PaddingBox" Grid.Column="3" />
-              <TextBlock Grid.Column="4" Margin="14,0,8,0" VerticalAlignment="Center" Text="Line spacing" Foreground="#AEB8C8" /><TextBox x:Name="LineSpacingBox" Grid.Column="5" />
+              <TextBlock Grid.Column="2" Margin="14,0,8,0" VerticalAlignment="Center" Text="Padding" Foreground="{DynamicResource KryptonTextBrush}" /><TextBox x:Name="PaddingBox" Grid.Column="3" />
+              <TextBlock Grid.Column="4" Margin="14,0,8,0" VerticalAlignment="Center" Text="Line spacing" Foreground="{DynamicResource KryptonTextBrush}" /><TextBox x:Name="LineSpacingBox" Grid.Column="5" />
             </Grid>
             <Grid Margin="0,3,0,20">
               <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /><ColumnDefinition Width="54" /></Grid.ColumnDefinitions>
-              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Window opacity" />
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Background transparency" />
               <Slider x:Name="OpacitySlider" Grid.Column="1" Minimum="0.2" Maximum="1" TickFrequency="0.05" ValueChanged="OnOpacityChanged" />
-              <TextBlock x:Name="OpacityValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="#C4A7FF" />
+              <TextBlock x:Name="OpacityValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource KryptonAccentHighlightBrush}" />
             </Grid>
             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Krypton colors" />
             <UniformGrid Columns="2" Margin="0,0,0,18">
-              <StackPanel Margin="0,0,12,8"><TextBlock Text="Background" FontSize="9" Foreground="#78859A" /><TextBox x:Name="BackgroundColorBox" /></StackPanel>
-              <StackPanel Margin="0,0,0,8"><TextBlock Text="Foreground" FontSize="9" Foreground="#78859A" /><TextBox x:Name="ForegroundColorBox" /></StackPanel>
-              <StackPanel Margin="0,0,12,8"><TextBlock Text="Accent" FontSize="9" Foreground="#78859A" /><TextBox x:Name="AccentColorBox" /></StackPanel>
-              <StackPanel Margin="0,0,0,8"><TextBlock Text="Selection" FontSize="9" Foreground="#78859A" /><TextBox x:Name="SelectionColorBox" /></StackPanel>
-              <StackPanel Margin="0,0,12,8"><TextBlock Text="Cursor" FontSize="9" Foreground="#78859A" /><TextBox x:Name="CursorColorBox" /></StackPanel>
-              <StackPanel Margin="0,0,0,8"><TextBlock Text="Split divider" FontSize="9" Foreground="#78859A" /><TextBox x:Name="SplitDividerColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,12,8"><TextBlock Text="Background" FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" /><TextBox x:Name="BackgroundColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,0,8"><TextBlock Text="Foreground" FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" /><TextBox x:Name="ForegroundColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,12,8"><TextBlock Text="Accent" FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" /><TextBox x:Name="AccentColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,0,8"><TextBlock Text="Selection" FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" /><TextBox x:Name="SelectionColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,12,8"><TextBlock Text="Cursor" FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" /><TextBox x:Name="CursorColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,0,8"><TextBlock Text="Split divider" FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" /><TextBox x:Name="SplitDividerColorBox" /></StackPanel>
             </UniformGrid>
             <TextBlock Style="{StaticResource SectionTitleStyle}" Text="ANSI 16-color palette" />
             <UniformGrid x:Name="AnsiPalettePanel" Columns="4" />
@@ -208,7 +231,7 @@
               <Grid.ColumnDefinitions><ColumnDefinition Width="210" /><ColumnDefinition Width="*" /><ColumnDefinition Width="54" /></Grid.ColumnDefinitions>
               <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Inactive pane opacity" />
               <Slider x:Name="UnfocusedPaneOpacitySlider" Grid.Column="1" Minimum="0.15" Maximum="1" TickFrequency="0.05" ValueChanged="OnPaneOpacityChanged" />
-              <TextBlock x:Name="PaneOpacityValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="#C4A7FF" />
+              <TextBlock x:Name="PaneOpacityValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource KryptonAccentHighlightBrush}" />
             </Grid>
           </StackPanel>
         </ScrollViewer>
@@ -221,7 +244,7 @@
             <TextBlock Margin="0,0,0,12"
                        Text="The + button opens the default profile. The terminal dropdown can launch any detected or saved profile."
                        FontSize="9"
-                       Foreground="#78859A" />
+                       Foreground="{DynamicResource KryptonMutedBrush}" />
             <Grid Margin="0,0,0,18">
               <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
               <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Default profile" />
@@ -234,8 +257,8 @@
             <Grid Margin="0,0,0,10">
               <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Saved connections and commands" FontSize="15" FontWeight="SemiBold" Foreground="#C4A7FF" />
-                <TextBlock Margin="0,3,0,0" Text="SSH and custom profiles are written to portable profile.* config keys." FontSize="9" Foreground="#78859A" />
+                <TextBlock Text="Saved connections and commands" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource KryptonAccentHighlightBrush}" />
+                <TextBlock Margin="0,3,0,0" Text="SSH and custom profiles are written to portable profile.* config keys." FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" />
               </StackPanel>
               <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button Style="{StaticResource ActionButtonStyle}" Content="+ SSH PROFILE" Click="OnAddSshProfileClick" />
@@ -253,8 +276,8 @@
           <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <StackPanel>
-              <TextBlock Text="Generated stem.conf" FontSize="14" FontWeight="SemiBold" Foreground="#C4A7FF" />
-              <TextBlock Margin="0,4,0,10" Text="Edit this code directly, or regenerate it from the GUI controls." FontSize="9" Foreground="#78859A" />
+              <TextBlock Text="Generated stem.conf" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource KryptonAccentHighlightBrush}" />
+              <TextBlock Margin="0,4,0,10" Text="Edit this code directly, or regenerate it from the GUI controls." FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}" />
             </StackPanel>
             <Button Grid.Column="1" Style="{StaticResource ActionButtonStyle}" Content="GENERATE FROM GUI" Click="OnGenerateCodeClick" />
           </Grid>
@@ -262,15 +285,15 @@
                    HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas"
                    FontSize="11" TextWrapping="NoWrap" VerticalContentAlignment="Top" TextChanged="OnConfigCodeChanged" />
           <TextBlock Grid.Row="2" Margin="0,8,0,0" Text="Manual code edits take precedence when you choose Save &amp; Apply."
-                     FontSize="9" Foreground="#667388" />
+                     FontSize="9" Foreground="{DynamicResource KryptonSubtleBrush}" />
         </Grid>
       </TabItem>
     </TabControl>
 
-    <Border Grid.Row="2" Padding="18,0" Background="#0B111D" BorderBrush="#233047" BorderThickness="0,1,0,0">
+    <Border Grid.Row="2" Padding="18,0" Background="{DynamicResource KryptonStatusBrush}" BorderBrush="{DynamicResource KryptonBorderBrush}" BorderThickness="0,1,0,0">
       <Grid>
         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-        <TextBlock x:Name="SettingsStatus" VerticalAlignment="Center" FontSize="9" Foreground="#78859A"
+        <TextBlock x:Name="SettingsStatus" VerticalAlignment="Center" FontSize="9" Foreground="{DynamicResource KryptonMutedBrush}"
                    Text="Changes apply to the terminal when saved." />
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
           <Button Style="{StaticResource ActionButtonStyle}" Content="CANCEL" Click="OnCancelClick" />

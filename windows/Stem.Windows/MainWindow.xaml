@@ -11,12 +11,12 @@
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         ResizeMode="CanResize"
-        Background="#070A12"
+        Background="Transparent"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         StateChanged="OnWindowStateChanged">
   <shell:WindowChrome.WindowChrome>
-    <shell:WindowChrome CaptionHeight="52"
+    <shell:WindowChrome CaptionHeight="44"
                         ResizeBorderThickness="7"
                         CornerRadius="12"
                         GlassFrameThickness="0"
@@ -27,20 +27,20 @@
           Margin="1"
           CornerRadius="12"
           BorderThickness="1"
-          Background="#070A12">
+          Background="{DynamicResource KryptonShellBrush}">
     <Border.BorderBrush>
       <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#4C8B5CF6" Offset="0" />
-        <GradientStop Color="#208B5CF6" Offset="0.5" />
-        <GradientStop Color="#3C2A354A" Offset="1" />
+        <GradientStop Color="{DynamicResource KryptonFrameStartColor}" Offset="0" />
+        <GradientStop Color="{DynamicResource KryptonFrameEndColor}" Offset="0.52" />
+        <GradientStop Color="{DynamicResource KryptonFrameStartColor}" Offset="1" />
       </LinearGradientBrush>
     </Border.BorderBrush>
 
     <Grid>
       <Grid.RowDefinitions>
-        <RowDefinition Height="52" />
+        <RowDefinition Height="44" />
         <RowDefinition Height="*" />
-        <RowDefinition Height="36" />
+        <RowDefinition Height="0" />
       </Grid.RowDefinitions>
 
       <Border Grid.Row="0"
@@ -48,9 +48,9 @@
               MouseLeftButtonDown="OnTitleBarMouseLeftButtonDown">
         <Border.Background>
           <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-            <GradientStop Color="#111829" Offset="0" />
-            <GradientStop Color="#0C111C" Offset="0.55" />
-            <GradientStop Color="#090D16" Offset="1" />
+            <GradientStop Color="{DynamicResource KryptonShellStartColor}" Offset="0" />
+            <GradientStop Color="{DynamicResource KryptonShellMidColor}" Offset="0.55" />
+            <GradientStop Color="{DynamicResource KryptonShellEndColor}" Offset="1" />
           </LinearGradientBrush>
         </Border.Background>
         <Grid>
@@ -59,6 +59,22 @@
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
+
+          <!-- Two restrained vector waves make the shell distinct without touching terminal rendering. -->
+          <Path Grid.ColumnSpan="3"
+                Margin="-24,4,-24,-5"
+                Stretch="Fill"
+                IsHitTestVisible="False"
+                Fill="{DynamicResource KryptonWaveSecondaryBrush}"
+                Opacity="0.42"
+                Data="M 0,36 C 135,4 252,58 410,25 C 566,-8 695,49 842,20 C 958,-3 1050,14 1120,5 L 1120,52 L 0,52 Z" />
+          <Path Grid.ColumnSpan="3"
+                Margin="-18,0,-18,1"
+                Stretch="Fill"
+                IsHitTestVisible="False"
+                Stroke="{DynamicResource KryptonWavePrimaryBrush}"
+                StrokeThickness="1.15"
+                Data="M 0,34 C 132,6 268,55 420,25 C 568,-4 714,47 862,18 C 969,-3 1052,12 1120,4" />
 
           <StackPanel Grid.Column="0"
                       Orientation="Horizontal"
@@ -70,21 +86,21 @@
                     BorderThickness="1">
               <Border.BorderBrush>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                  <GradientStop Color="#8B5CF6" Offset="0" />
-                  <GradientStop Color="#C4A7FF" Offset="1" />
+                  <GradientStop Color="{DynamicResource KryptonFrameEndColor}" Offset="0" />
+                  <GradientStop Color="{DynamicResource KryptonFrameStartColor}" Offset="1" />
                 </LinearGradientBrush>
               </Border.BorderBrush>
               <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                  <GradientStop Color="#2B1D4D" Offset="0" />
-                  <GradientStop Color="#1D1533" Offset="1" />
+                  <GradientStop Color="{DynamicResource KryptonShellMidColor}" Offset="0" />
+                  <GradientStop Color="{DynamicResource KryptonShellEndColor}" Offset="1" />
                 </LinearGradientBrush>
               </Border.Background>
               <TextBlock Text="K"
                          FontFamily="Cascadia Mono, Consolas"
                          FontSize="15"
                          FontWeight="Bold"
-                         Foreground="#F4F7FF"
+                         Foreground="{DynamicResource KryptonTitleTextBrush}"
                          HorizontalAlignment="Center"
                          VerticalAlignment="Center" />
             </Border>
@@ -93,7 +109,7 @@
                        VerticalAlignment="Center"
                        FontSize="14"
                        FontWeight="SemiBold"
-                       Foreground="#F0F3F8" />
+                       Foreground="{DynamicResource KryptonTitleTextBrush}" />
           </StackPanel>
 
           <Border Grid.Column="1"
@@ -101,21 +117,21 @@
                   VerticalAlignment="Center"
                   Padding="12,5"
                   CornerRadius="12"
-                  BorderBrush="#273248"
+                  BorderBrush="{DynamicResource KryptonWaveSecondaryBrush}"
                   BorderThickness="1"
-                  Background="#88080C14">
+                  Background="{DynamicResource KryptonMenuBrush}">
             <StackPanel Orientation="Horizontal">
               <Ellipse Width="6"
                        Height="6"
                        Margin="0,0,7,0"
                        VerticalAlignment="Center"
-                       Fill="#8B5CF6" />
+                       Fill="{DynamicResource KryptonAccentHighlightBrush}" />
               <TextBlock x:Name="WindowSessionTitle"
                          Text="PowerShell"
                          MaxWidth="420"
                          TextTrimming="CharacterEllipsis"
                          FontSize="11"
-                         Foreground="#AEB8C8" />
+                         Foreground="{DynamicResource KryptonTextBrush}" />
             </StackPanel>
           </Border>
 
@@ -139,16 +155,16 @@
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1" Margin="12,7,12,7">
+      <Grid Grid.Row="1" Margin="2">
         <Border
                 CornerRadius="10"
                 BorderThickness="1"
-                Background="#05070C">
+                Background="{DynamicResource KryptonTerminalChromeBrush}">
           <Border.BorderBrush>
             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-              <GradientStop Color="#6D8B5CF6" Offset="0" />
-              <GradientStop Color="#3240546B" Offset="0.42" />
-              <GradientStop Color="#6D8B5CF6" Offset="1" />
+              <GradientStop Color="{DynamicResource KryptonFrameStartColor}" Offset="0" />
+              <GradientStop Color="{DynamicResource KryptonFrameEndColor}" Offset="0.42" />
+              <GradientStop Color="{DynamicResource KryptonFrameStartColor}" Offset="1" />
             </LinearGradientBrush>
           </Border.BorderBrush>
           <Grid Margin="1">
@@ -159,9 +175,9 @@
 
             <Border Grid.Row="0"
                     CornerRadius="8,8,0,0"
-                    BorderBrush="#1F2A3B"
+                    BorderBrush="{DynamicResource KryptonBorderBrush}"
                     BorderThickness="0,0,0,1"
-                    Background="#0C121E">
+                    Background="{DynamicResource KryptonPanelBrush}">
               <Grid Margin="11,0">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="Auto" />
@@ -171,19 +187,19 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                   <Border Padding="8,3"
                           CornerRadius="9"
-                          BorderBrush="#5E4296"
+                          BorderBrush="{DynamicResource KryptonBorderBrush}"
                           BorderThickness="1"
-                          Background="#1D1533">
+                          Background="{DynamicResource KryptonMenuSelectedBrush}">
                     <TextBlock x:Name="ShellBadge"
                                Text="POWERSHELL"
                                FontSize="8.5"
                                FontWeight="Bold"
-                               Foreground="#C4A7FF" />
+                               Foreground="{DynamicResource KryptonAccentHighlightBrush}" />
                   </Border>
                   <TextBlock Text="  /  LOCAL SESSION"
                              VerticalAlignment="Center"
                              FontSize="8.5"
-                             Foreground="#606C7E" />
+                             Foreground="{DynamicResource KryptonMutedBrush}" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1"
@@ -201,10 +217,10 @@
                           Padding="0"
                           Content="+"
                           ToolTip="New PowerShell tab (Ctrl+Shift+T)"
-                          BorderBrush="#4C8B5CF6"
+                          BorderBrush="{DynamicResource KryptonBorderBrush}"
                           BorderThickness="1"
-                          Background="#1D1533"
-                          Foreground="#C4A7FF"
+                          Background="{DynamicResource KryptonMenuSelectedBrush}"
+                          Foreground="{DynamicResource KryptonAccentHighlightBrush}"
                           FontSize="15"
                           FontWeight="SemiBold"
                           FocusVisualStyle="{x:Null}"
@@ -215,17 +231,17 @@
                           Padding="0"
                           Content="⌄"
                           ToolTip="Terminal options"
-                          BorderBrush="#33415A"
+                          BorderBrush="{DynamicResource KryptonBorderBrush}"
                           BorderThickness="1"
-                          Background="#101827"
-                          Foreground="#C4A7FF"
+                          Background="{DynamicResource KryptonPanelBrush}"
+                          Foreground="{DynamicResource KryptonAccentHighlightBrush}"
                           FontSize="12"
                           FocusVisualStyle="{x:Null}"
                           Click="OnSessionMenuClick">
                     <Button.ContextMenu>
-                      <ContextMenu Background="#0D1420"
-                                   Foreground="#D8DAD4"
-                                   BorderBrush="#5E4296"
+                      <ContextMenu Background="{DynamicResource KryptonMenuBrush}"
+                                   Foreground="{DynamicResource KryptonTextBrush}"
+                                   BorderBrush="{DynamicResource KryptonBorderBrush}"
                                    BorderThickness="1"
                                    Padding="4">
                         <MenuItem Header="New tab"
@@ -262,28 +278,29 @@
                            Width="6"
                            Height="6"
                            Margin="0,0,7,0"
-                           Fill="#E4B856" />
+                           Fill="{DynamicResource KryptonWarningBrush}" />
                   <TextBlock x:Name="ConnectionStatus"
                              Text="STARTING"
                              FontSize="8.5"
                              FontWeight="SemiBold"
-                             Foreground="#8D98A9" />
+                             Foreground="{DynamicResource KryptonMutedBrush}" />
                 </StackPanel>
               </Grid>
             </Border>
 
-            <Border Grid.Row="1"
-                    Margin="5"
+            <Border x:Name="TerminalViewportFrame"
+                    Grid.Row="1"
+                    Margin="0"
                     CornerRadius="5"
-                    BorderBrush="#152033"
+                    BorderBrush="{DynamicResource KryptonBorderBrush}"
                     BorderThickness="1"
-                    Background="#05070C"
+                    Background="{DynamicResource KryptonTerminalChromeBrush}"
                     ClipToBounds="True">
               <Grid>
                 <ContentControl x:Name="TerminalHost"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch"
-                                Background="#05070C" />
+                                Background="{DynamicResource KryptonTerminalChromeBrush}" />
 
                 <Border x:Name="SearchPanel"
                         Width="390"
@@ -294,9 +311,9 @@
                         Panel.ZIndex="10"
                         Visibility="Collapsed"
                         CornerRadius="7"
-                        BorderBrush="#6D8B5CF6"
+                        BorderBrush="{DynamicResource KryptonAccentBrush}"
                         BorderThickness="1"
-                        Background="#F20C111C">
+                        Background="{DynamicResource KryptonMenuBrush}">
                   <Border.Resources>
                     <Style TargetType="Button">
                       <Setter Property="Width" Value="28" />
@@ -304,8 +321,8 @@
                       <Setter Property="Margin" Value="3,0,0,0" />
                       <Setter Property="Padding" Value="0" />
                       <Setter Property="BorderThickness" Value="0" />
-                      <Setter Property="Background" Value="#182235" />
-                      <Setter Property="Foreground" Value="#C4A7FF" />
+                      <Setter Property="Background" Value="{DynamicResource KryptonMenuHoverBrush}" />
+                      <Setter Property="Foreground" Value="{DynamicResource KryptonAccentHighlightBrush}" />
                       <Setter Property="FontSize" Value="12" />
                       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                     </Style>
@@ -322,11 +339,11 @@
                              Height="26"
                              Padding="7,3"
                              VerticalContentAlignment="Center"
-                             BorderBrush="#3B4A62"
+                             BorderBrush="{DynamicResource KryptonBorderBrush}"
                              BorderThickness="1"
-                             Background="#05070C"
-                             Foreground="#F0F3F8"
-                             CaretBrush="#8B5CF6"
+                             Background="{DynamicResource KryptonTerminalChromeBrush}"
+                             Foreground="{DynamicResource KryptonTitleTextBrush}"
+                             CaretBrush="{DynamicResource KryptonAccentBrush}"
                              FontFamily="Cascadia Mono, Consolas"
                              FontSize="11"
                              TextChanged="OnSearchTextChanged"
@@ -337,7 +354,7 @@
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                FontSize="9"
-                               Foreground="#7F8A9D" />
+                               Foreground="{DynamicResource KryptonMutedBrush}" />
                     <Button Grid.Column="2"
                             Content="↑"
                             ToolTip="Previous match (Shift+Enter)"
@@ -359,23 +376,39 @@
       </Grid>
 
       <Border Grid.Row="2"
-              BorderBrush="#182235"
+              Visibility="Collapsed"
+              BorderBrush="{DynamicResource KryptonBorderBrush}"
               BorderThickness="0,1,0,0"
-              Background="#090E17"
+              Background="{DynamicResource KryptonStatusBrush}"
               CornerRadius="0,0,11,11">
-        <Grid Margin="14,0">
+        <Grid Margin="14,0" ClipToBounds="True">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
+          <Path Grid.ColumnSpan="3"
+                Margin="-16,0,-16,-5"
+                Stretch="Fill"
+                IsHitTestVisible="False"
+                Fill="{DynamicResource KryptonWaveSecondaryBrush}"
+                Opacity="0.28"
+                Data="M 0,26 C 170,8 305,34 470,18 C 635,2 812,32 980,14 C 1030,8 1080,8 1120,5 L 1120,36 L 0,36 Z" />
+          <Path Grid.ColumnSpan="3"
+                Margin="-16,0,-16,0"
+                Stretch="Fill"
+                IsHitTestVisible="False"
+                Stroke="{DynamicResource KryptonWavePrimaryBrush}"
+                StrokeThickness="0.8"
+                Opacity="0.6"
+                Data="M 0,24 C 168,7 314,32 478,17 C 642,2 814,30 986,13 C 1034,8 1081,7 1120,5" />
           <TextBlock x:Name="ScrollbackStatus"
                      Grid.Column="1"
                      Text="LIVE"
                      HorizontalAlignment="Center"
                      VerticalAlignment="Center"
                      FontSize="8"
-                     Foreground="#3F4B5E" />
+                     Foreground="{DynamicResource KryptonSubtleBrush}" />
           <TextBlock x:Name="TerminalDimensions"
                      Grid.Column="2"
                      Text="120 × 40"
@@ -383,7 +416,7 @@
                      VerticalAlignment="Center"
                      FontFamily="Cascadia Mono, Consolas"
                      FontSize="9"
-                     Foreground="#758196" />
+                     Foreground="{DynamicResource KryptonMutedBrush}" />
         </Grid>
       </Border>
     </Grid>

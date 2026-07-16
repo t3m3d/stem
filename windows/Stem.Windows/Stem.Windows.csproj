@@ -8,5 +8,11 @@
     <AssemblyName>stem</AssemblyName>
     <RootNamespace>Stem.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>0.1.0</Version>
+    <AssemblyTitle>STEM</AssemblyTitle>
+    <Product>STEM Terminal</Product>
+    <Description>A fast Krypton-themed terminal emulator for Windows.</Description>
+    <Authors>KryptonBytes</Authors>
+    <Copyright>Copyright © 2026 KryptonBytes</Copyright>
   </PropertyGroup>
 </Project>

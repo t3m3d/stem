@@ -183,6 +183,52 @@ static void TestSettings()
     }
 }
 
+
+static void TestThemesAndSessionStore()
+{
+    Assert(KryptonTheme.Normalize("krypton") == KryptonTheme.Dark, "legacy krypton theme maps to dark");
+    Assert(KryptonTheme.IsLight("krypton-light"), "light theme is recognized");
+    Assert(!KryptonTheme.IsLight("krypton-dark"), "dark and light chrome modes stay distinct");
+
+    var directory = Path.Combine(Path.GetTempPath(), $"stem-session-{Guid.NewGuid():N}");
+    var path = Path.Combine(directory, "session.json");
+    try
+    {
+        var state = new StemSessionState
+        {
+            ActiveTabIndex = 1,
+            WindowLeft = 140,
+            WindowTop = 90,
+            WindowWidth = 1180,
+            WindowHeight = 760,
+            Maximized = true,
+            Tabs =
+            [
+                new StemTabSessionState { Root = StemPaneLayoutState.Pane("default") },
+                new StemTabSessionState
+                {
+                    ActivePaneIndex = 1,
+                    Root = StemPaneLayoutState.Split(
+                        sideBySide: true,
+                        StemPaneLayoutState.Pane("wsl-ubuntu"),
+                        StemPaneLayoutState.Pane("ssh-prod"))
+                }
+            ]
+        };
+        Assert(StemSessionStore.Save(state, path), "session state saves atomically");
+        var restored = StemSessionStore.Load(path);
+        Assert(restored is not null, "session state loads");
+        Assert(restored!.Tabs.Count == 2 && restored.ActiveTabIndex == 1, "session tabs and active tab round trip");
+        Assert(restored.Tabs[1].Root.SideBySide && restored.Tabs[1].ActivePaneIndex == 1, "split layout and active pane round trip");
+        Assert(restored.WindowLeft == 140 && restored.WindowWidth == 1180 && restored.Maximized, "window placement round trips");
+    }
+    finally
+    {
+        if (File.Exists(path)) File.Delete(path);
+        if (Directory.Exists(directory)) Directory.Delete(directory);
+    }
+}
+
 static async Task TestConPtyAsync()
 {
     var configuredShell = Environment.GetEnvironmentVariable("STEM_SHELL");
@@ -236,5 +282,6 @@ static async Task TestConPtyAsync()
 TestTerminalBuffer();
 TestProfiles();
 TestSettings();
+TestThemesAndSessionStore();
 await TestConPtyAsync();
-Console.WriteLine("PASS: VT grid + PowerShell ConPTY round trip");
+Console.WriteLine("PASS: VT grid + themes + sessions + PowerShell ConPTY round trip");

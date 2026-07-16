@@ -106,7 +106,7 @@ public sealed class TerminalView : Control
         _selectionBackground = settings.SelectionColor;
         _activeSearchBackground = settings.AccentColor;
         _searchBackground = Mix(settings.BackgroundColor, settings.AccentColor, 0.46);
-        Background = Brush(_configuredBackground);
+        Background = BackgroundBrush(_configuredBackground, settings.Opacity);
         Foreground = Brush(_configuredForeground);
         CopyOnSelect = settings.CopyOnSelect;
         Buffer.ScrollbackLimit = settings.ScrollbackLines;
@@ -959,6 +959,17 @@ public sealed class TerminalView : Control
             Channel(first.R, second.R, amount),
             Channel(first.G, second.G, amount),
             Channel(first.B, second.B, amount));
+    }
+
+    private static SolidColorBrush BackgroundBrush(TerminalColor color, double opacity)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(
+            (byte)Math.Round(Math.Clamp(opacity, 0.2, 1) * 255),
+            color.R,
+            color.G,
+            color.B));
+        brush.Freeze();
+        return brush;
     }
 
     private SolidColorBrush Brush(TerminalColor color)

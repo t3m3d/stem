@@ -1,7 +1,6 @@
 <Application x:Class="Stem.Windows.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             StartupUri="MainWindow.xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <Application.Resources>
     <!-- Defaults are Krypton Dark. KryptonTheme swaps these resources at runtime. -->
     <Color x:Key="KryptonShellStartColor">#4C1D95</Color>
@@ -36,6 +35,8 @@
     <SolidColorBrush x:Key="KryptonWarningBrush" Color="#E4B856" />
     <SolidColorBrush x:Key="KryptonSelectionBrush" Color="#3A2A60" />
     <SolidColorBrush x:Key="KryptonShadowBrush" Color="#AA000000" />
+    <SolidColorBrush x:Key="KryptonWavePrimaryBrush" Color="#58FFFFFF" />
+    <SolidColorBrush x:Key="KryptonWaveSecondaryBrush" Color="#48C4A7FF" />
 
     <Style TargetType="Window">
       <Setter Property="FontFamily" Value="Segoe UI" />

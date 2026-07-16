@@ -75,19 +75,25 @@ public partial class MainWindow : Window
     private int _nextTabId = 1;
     private bool _started;
     private bool _closingConfirmed;
+    private bool _sessionRestored;
 
     private TerminalPane? ActivePane => _activeTab?.ActivePane;
     private TerminalView? ActiveTerminal => ActivePane?.Terminal;
 
     public MainWindow()
     {
-        InitializeComponent();
-        DarkWindowTheme.Apply(this);
         _settings = StemSettings.Load();
+        KryptonTheme.ApplyApplication(_settings.Theme, _settings.Opacity);
+        InitializeComponent();
+        DarkWindowTheme.Apply(this, dark: !KryptonTheme.IsLight(_settings.Theme), _settings.Opacity);
         _profiles = StemProfileCatalog.Discover(_settings);
-        var initialTab = CreateTab(startSession: false);
-        ActivateTab(initialTab);
-        ApplySettings(_settings, initial: true);
+        _sessionRestored = _settings.RestoreSession && RestoreSession();
+        if (!_sessionRestored)
+        {
+            var initialTab = CreateTab(startSession: false);
+            ActivateTab(initialTab);
+        }
+        ApplySettings(_settings, initial: !_sessionRestored);
         _configWriteTimeUtc = ConfigWriteTimeUtc();
 
         Loaded += OnLoaded;
@@ -98,6 +104,170 @@ public partial class MainWindow : Window
     }
 
     private StemProfile DefaultProfile() => StemProfileCatalog.Default(_settings, _profiles);
+
+
+    private StemProfile ProfileById(string? id) =>
+        _profiles.FirstOrDefault(profile =>
+            string.Equals(profile.Id, id, StringComparison.OrdinalIgnoreCase))
+        ?? DefaultProfile();
+
+    private bool RestoreSession()
+    {
+        var state = StemSessionStore.Load();
+        if (state is null || state.Tabs.Count == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var tabState in state.Tabs.Take(24))
+            {
+                CreateRestoredTab(tabState);
+            }
+
+            if (_tabs.Count == 0)
+            {
+                return false;
+            }
+
+            var activeIndex = Math.Clamp(state.ActiveTabIndex, 0, _tabs.Count - 1);
+            ActivateTab(_tabs[activeIndex]);
+
+            if (double.IsFinite(state.WindowWidth) && state.WindowWidth >= MinWidth)
+            {
+                Width = Math.Min(state.WindowWidth, SystemParameters.VirtualScreenWidth);
+            }
+            if (double.IsFinite(state.WindowHeight) && state.WindowHeight >= MinHeight)
+            {
+                Height = Math.Min(state.WindowHeight, SystemParameters.VirtualScreenHeight);
+            }
+            if (double.IsFinite(state.WindowLeft) &&
+                double.IsFinite(state.WindowTop) &&
+                state.WindowLeft + Width > SystemParameters.VirtualScreenLeft &&
+                state.WindowTop + Height > SystemParameters.VirtualScreenTop &&
+                state.WindowLeft < SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth &&
+                state.WindowTop < SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight)
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Left = state.WindowLeft;
+                Top = state.WindowTop;
+            }
+            if (state.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+            }
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            foreach (var tab in _tabs)
+            {
+                tab.Dispose();
+            }
+            _tabs.Clear();
+            TabStrip.Children.Clear();
+            _activeTab = null;
+            return false;
+        }
+    }
+
+    private SessionTab CreateRestoredTab(StemTabSessionState state)
+    {
+        var leaves = new List<StemPaneLayoutState>();
+        CollectLeaves(state.Root, leaves, depth: 0);
+        if (leaves.Count == 0)
+        {
+            leaves.Add(StemPaneLayoutState.Pane("default"));
+        }
+
+        var tab = CreateTab(startSession: false, ProfileById(leaves[0].ProfileId));
+        var paneQueue = new Queue<TerminalPane>();
+        paneQueue.Enqueue(tab.Panes[0]);
+        foreach (var leaf in leaves.Skip(1).Take(31))
+        {
+            paneQueue.Enqueue(CreatePane(tab, startSession: false, ProfileById(leaf.ProfileId)));
+        }
+
+        tab.Root = RestoreLayoutNode(state.Root, paneQueue, depth: 0);
+        tab.ActivePane = tab.Panes[Math.Clamp(state.ActivePaneIndex, 0, tab.Panes.Count - 1)];
+        RebuildTabLayout(tab);
+        UpdateTabTitle(tab);
+        return tab;
+    }
+
+    private static void CollectLeaves(
+        StemPaneLayoutState state,
+        ICollection<StemPaneLayoutState> leaves,
+        int depth)
+    {
+        if (leaves.Count >= 32)
+        {
+            return;
+        }
+        if (depth >= 12 ||
+            !string.Equals(state.Type, "split", StringComparison.OrdinalIgnoreCase) ||
+            state.First is null ||
+            state.Second is null)
+        {
+            leaves.Add(state);
+            return;
+        }
+
+        CollectLeaves(state.First, leaves, depth + 1);
+        CollectLeaves(state.Second, leaves, depth + 1);
+    }
+
+    private static PaneNode RestoreLayoutNode(
+        StemPaneLayoutState state,
+        Queue<TerminalPane> panes,
+        int depth)
+    {
+        if (depth >= 12 ||
+            !string.Equals(state.Type, "split", StringComparison.OrdinalIgnoreCase) ||
+            state.First is null ||
+            state.Second is null ||
+            panes.Count < 2)
+        {
+            return new PaneLeaf(panes.Dequeue());
+        }
+
+        var first = RestoreLayoutNode(state.First, panes, depth + 1);
+        var second = RestoreLayoutNode(state.Second, panes, depth + 1);
+        return new PaneBranch(state.SideBySide, first, second);
+    }
+
+    private StemSessionState CaptureSession()
+    {
+        var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+        return new StemSessionState
+        {
+            ActiveTabIndex = Math.Max(0, _tabs.IndexOf(_activeTab!)),
+            WindowLeft = bounds.Left,
+            WindowTop = bounds.Top,
+            WindowWidth = bounds.Width,
+            WindowHeight = bounds.Height,
+            Maximized = WindowState == WindowState.Maximized,
+            Tabs =
+            [
+                .. _tabs.Select(tab => new StemTabSessionState
+                {
+                    ActivePaneIndex = Math.Max(0, tab.Panes.IndexOf(tab.ActivePane)),
+                    Root = CaptureLayout(tab.Root)
+                })
+            ]
+        };
+    }
+
+    private static StemPaneLayoutState CaptureLayout(PaneNode node) => node switch
+    {
+        PaneLeaf leaf => StemPaneLayoutState.Pane(leaf.Pane.Profile.Id),
+        PaneBranch branch => StemPaneLayoutState.Split(
+            branch.SideBySide,
+            CaptureLayout(branch.First),
+            CaptureLayout(branch.Second)),
+        _ => StemPaneLayoutState.Pane("default")
+    };
 
     private SessionTab CreateTab(bool startSession, StemProfile? profile = null)
     {
@@ -131,10 +301,10 @@ public partial class MainWindow : Window
             Padding = new Thickness(0),
             BorderThickness = new Thickness(0),
             Background = Brushes.Transparent,
-            Foreground = new SolidColorBrush(Color.FromRgb(126, 137, 155)),
             FontSize = 10,
             ToolTip = "Close tab"
         };
+        close.SetResourceReference(Control.ForegroundProperty, "KryptonMutedBrush");
         close.Click += OnTabCloseClick;
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
@@ -195,19 +365,14 @@ public partial class MainWindow : Window
     private TerminalPane CreatePane(SessionTab tab, bool startSession, StemProfile profile)
     {
         var paneId = tab.NextPaneId++;
-        var terminal = new TerminalView
-        {
-            Background = new SolidColorBrush(Color.FromRgb(5, 7, 12)),
-            Foreground = new SolidColorBrush(Color.FromRgb(216, 218, 212))
-        };
+        var terminal = new TerminalView();
         terminal.ApplySettings(_settings);
 
         var badgeText = new TextBlock
         {
             Text = $"P{paneId}",
             FontSize = 8,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(196, 167, 255))
+            FontWeight = FontWeights.Bold
         };
         var badge = new Border
         {
@@ -217,11 +382,12 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Top,
             CornerRadius = new CornerRadius(7),
             BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(78, 58, 121)),
-            Background = new SolidColorBrush(Color.FromRgb(24, 18, 42)),
             IsHitTestVisible = false,
             Child = badgeText
         };
+        badgeText.SetResourceReference(TextBlock.ForegroundProperty, "KryptonAccentHighlightBrush");
+        badge.SetResourceReference(Border.BorderBrushProperty, "KryptonBorderBrush");
+        badge.SetResourceReference(Border.BackgroundProperty, "KryptonMenuSelectedBrush");
         var content = new Grid();
         content.Children.Add(terminal);
         content.Children.Add(badge);
@@ -229,11 +395,12 @@ public partial class MainWindow : Window
         {
             Margin = new Thickness(1),
             BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(32, 43, 61)),
-            Background = new SolidColorBrush(Color.FromRgb(5, 7, 12)),
+            Background = terminal.Background,
             ClipToBounds = true,
             Child = content
         };
+
+        surface.SetResourceReference(Border.BorderBrushProperty, "KryptonBorderBrush");
 
         var pane = new TerminalPane
         {
@@ -476,14 +643,15 @@ public partial class MainWindow : Window
         foreach (var tab in _tabs)
         {
             var active = tab == _activeTab;
-            tab.TabElement.Background = new SolidColorBrush(active
-                ? Color.FromRgb(43, 29, 77)
-                : Color.FromRgb(13, 20, 32));
-            tab.TabElement.BorderBrush = new SolidColorBrush(active
-                ? Color.FromRgb(139, 92, 246)
-                : Color.FromRgb(42, 55, 74));
-            tab.TabTitle.Foreground = new SolidColorBrush(
-                active ? Color.FromRgb(196, 167, 255) : Color.FromRgb(151, 162, 179));
+            tab.TabElement.SetResourceReference(
+                Border.BackgroundProperty,
+                active ? "KryptonMenuSelectedBrush" : "KryptonMenuBrush");
+            tab.TabElement.SetResourceReference(
+                Border.BorderBrushProperty,
+                active ? "KryptonAccentBrush" : "KryptonBorderBrush");
+            tab.TabTitle.SetResourceReference(
+                TextBlock.ForegroundProperty,
+                active ? "KryptonAccentHighlightBrush" : "KryptonMutedBrush");
         }
     }
 
@@ -493,9 +661,14 @@ public partial class MainWindow : Window
         {
             var active = pane == tab.ActivePane;
             pane.Surface.Opacity = active ? 1 : _settings.UnfocusedPaneOpacity;
-            pane.Surface.BorderBrush = new SolidColorBrush(active
-                ? _settings.SplitDividerColor.ToMediaColor()
-                : Color.FromRgb(32, 43, 61));
+            if (active)
+            {
+                pane.Surface.BorderBrush = new SolidColorBrush(_settings.SplitDividerColor.ToMediaColor());
+            }
+            else
+            {
+                pane.Surface.SetResourceReference(Border.BorderBrushProperty, "KryptonBorderBrush");
+            }
             pane.Surface.BorderThickness = new Thickness(active ? 1.5 : 1);
             pane.Badge.Text = active ? $"P{pane.Id}  ACTIVE" : $"P{pane.Id}";
         }
@@ -530,7 +703,7 @@ public partial class MainWindow : Window
         }
 
         var branch = (PaneBranch)node;
-        var grid = new Grid { Background = new SolidColorBrush(Color.FromRgb(5, 7, 12)) };
+        var grid = new Grid { Background = ActiveTerminal?.Background ?? Brushes.Transparent };
         var first = BuildPaneVisual(branch.First);
         var second = BuildPaneVisual(branch.Second);
         var divider = new GridSplitter
@@ -1045,8 +1218,9 @@ public partial class MainWindow : Window
         SearchCount.Text = result.Total == 0
             ? "0 / 0"
             : $"{result.Current:N0} / {result.Total:N0}";
-        SearchCount.Foreground = new SolidColorBrush(
-            result.Total == 0 ? Color.FromRgb(126, 137, 155) : Color.FromRgb(196, 167, 255));
+        SearchCount.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            result.Total == 0 ? "KryptonMutedBrush" : "KryptonAccentHighlightBrush");
     }
 
     private void CloseSearch()
@@ -1111,15 +1285,19 @@ public partial class MainWindow : Window
 
     private void ApplySettings(StemSettings settings, bool initial)
     {
+        KryptonTheme.ApplyApplication(settings.Theme, settings.Opacity);
+        DarkWindowTheme.Apply(this, dark: !KryptonTheme.IsLight(settings.Theme), settings.Opacity);
         foreach (var tab in _tabs)
         {
             foreach (var pane in tab.Panes)
             {
                 pane.Terminal.ApplySettings(settings);
+                pane.Surface.Background = pane.Terminal.Background;
             }
             RebuildTabLayout(tab);
         }
-        Opacity = settings.Opacity;
+        // Background surfaces carry alpha; glyphs and controls remain fully opaque.
+        Opacity = 1;
         Title = settings.WindowTitle;
         if (!initial || ActiveTerminal is not { } terminal)
         {
@@ -1129,7 +1307,7 @@ public partial class MainWindow : Window
         var grid = terminal.EstimatedGridSize(settings.Columns, settings.Rows);
         var workArea = SystemParameters.WorkArea;
         Width = Math.Clamp(grid.Width + 38, MinWidth, Math.Max(MinWidth, workArea.Width * 0.94));
-        Height = Math.Clamp(grid.Height + 134, MinHeight, Math.Max(MinHeight, workArea.Height * 0.94));
+        Height = Math.Clamp(grid.Height + 82, MinHeight, Math.Max(MinHeight, workArea.Height * 0.94));
     }
 
     private static DateTime ConfigWriteTimeUtc()
@@ -1165,6 +1343,11 @@ public partial class MainWindow : Window
                 return;
             }
             _closingConfirmed = true;
+        }
+
+        if (_settings.RestoreSession && _tabs.Count > 0)
+        {
+            _ = StemSessionStore.Save(CaptureSession());
         }
 
         foreach (var tab in _tabs)
