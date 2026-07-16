@@ -1,0 +1,282 @@
+<Window x:Class="Stem.Windows.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="STEM Settings"
+        Width="880"
+        Height="720"
+        MinWidth="760"
+        MinHeight="600"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        Background="#070A12"
+        Foreground="#D8DAD4">
+  <Window.Resources>
+    <SolidColorBrush x:Key="PanelBrush" Color="#0C121E" />
+    <SolidColorBrush x:Key="FieldBrush" Color="#05070C" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#28364D" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#8B5CF6" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#7E899B" />
+    <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap" /></Style>
+    <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+      <Setter Property="Margin" Value="0,4,0,12" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="#C4A7FF" />
+    </Style>
+    <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+      <Setter Property="Margin" Value="0,0,12,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#AEB8C8" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Height" Value="30" />
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Background" Value="{StaticResource FieldBrush}" />
+      <Setter Property="Foreground" Value="#EEF1F6" />
+      <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="SelectionBrush" Value="#6D8B5CF6" />
+    </Style>
+    <Style TargetType="ComboBox">
+      <Setter Property="Height" Value="30" />
+      <Setter Property="Padding" Value="7,3" />
+      <Setter Property="Background" Value="{StaticResource FieldBrush}" />
+      <Setter Property="Foreground" Value="#EEF1F6" />
+      <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style TargetType="CheckBox">
+      <Setter Property="Margin" Value="0,7" />
+      <Setter Property="Foreground" Value="#D8DAD4" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style TargetType="Slider"><Setter Property="Foreground" Value="{StaticResource AccentBrush}" /></Style>
+    <Style x:Key="ActionButtonStyle" TargetType="Button">
+      <Setter Property="Height" Value="34" />
+      <Setter Property="MinWidth" Value="104" />
+      <Setter Property="Margin" Value="8,0,0,0" />
+      <Setter Property="Padding" Value="14,0" />
+      <Setter Property="Background" Value="#141D2B" />
+      <Setter Property="Foreground" Value="#D8DAD4" />
+      <Setter Property="BorderBrush" Value="#35455F" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    </Style>
+    <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
+      <Setter Property="Background" Value="#5E35B1" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="BorderBrush" Value="#A78BFA" />
+    </Style>
+    <Style TargetType="TabItem">
+      <Setter Property="Foreground" Value="#AEB8C8" />
+      <Setter Property="Background" Value="#0A101A" />
+      <Setter Property="BorderBrush" Value="#28364D" />
+      <Setter Property="Padding" Value="16,8" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </Window.Resources>
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="72" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="62" />
+    </Grid.RowDefinitions>
+    <Border Grid.Row="0" Padding="22,0" Background="#0B111D" BorderBrush="#233047" BorderThickness="0,0,0,1">
+      <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+        <Border Width="38" Height="38" CornerRadius="10" BorderBrush="#8B5CF6" BorderThickness="1" Background="#21163E">
+          <TextBlock Text="K" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="16" FontWeight="Bold" Foreground="White" />
+        </Border>
+        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+          <TextBlock Text="STEM SETTINGS" FontSize="15" FontWeight="SemiBold" Foreground="#F2F4F8" />
+          <TextBlock Text="GUI configuration with portable config-code output" Margin="0,3,0,0" FontSize="9" Foreground="#78859A" />
+        </StackPanel>
+        <Border Grid.Column="2" Padding="10,5" CornerRadius="10" BorderBrush="#4C8B5CF6" BorderThickness="1" Background="#15102A">
+          <TextBlock Text="KRYPTON THEME" FontSize="8" FontWeight="Bold" Foreground="#C4A7FF" />
+        </Border>
+      </Grid>
+    </Border>
+
+    <TabControl x:Name="SettingsTabs" Grid.Row="1" Margin="18,14,18,0" Background="#070A12" BorderBrush="#28364D" SelectionChanged="OnSettingsTabChanged">
+      <TabItem Header="TERMINAL">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="20">
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Shell and startup" />
+            <Grid Margin="0,0,0,8">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Window title" /><TextBox x:Name="WindowTitleBox" Grid.Column="1" />
+            </Grid>
+            <Grid Margin="0,0,0,8">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Shell command" /><TextBox x:Name="ShellBox" Grid.Column="1" ToolTip="Blank uses the platform default" />
+            </Grid>
+            <Grid Margin="0,0,0,8">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Working directory" /><TextBox x:Name="WorkingDirectoryBox" Grid.Column="1" />
+            </Grid>
+            <Grid Margin="0,0,0,20">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="TERM value" /><TextBox x:Name="TermBox" Grid.Column="1" />
+            </Grid>
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Initial terminal grid" />
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="110" /><ColumnDefinition Width="48" /><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Grid size" />
+              <TextBox x:Name="ColumnsBox" Grid.Column="1" />
+              <TextBlock Grid.Column="2" Text="×" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#78859A" />
+              <TextBox x:Name="RowsBox" Grid.Column="3" />
+              <TextBlock Grid.Column="4" Margin="12,0,0,0" Text="columns × rows" VerticalAlignment="Center" FontSize="9" Foreground="#667388" />
+            </Grid>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="APPEARANCE">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="20">
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Typography and spacing" />
+            <Grid Margin="0,0,0,8">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Font family" /><ComboBox x:Name="FontFamilyBox" Grid.Column="1" IsEditable="True" IsTextSearchEnabled="True" />
+            </Grid>
+            <Grid Margin="0,0,0,8">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="110" /><ColumnDefinition Width="120" /><ColumnDefinition Width="110" /><ColumnDefinition Width="120" /><ColumnDefinition Width="110" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Font size" /><TextBox x:Name="FontSizeBox" Grid.Column="1" />
+              <TextBlock Grid.Column="2" Margin="14,0,8,0" VerticalAlignment="Center" Text="Padding" Foreground="#AEB8C8" /><TextBox x:Name="PaddingBox" Grid.Column="3" />
+              <TextBlock Grid.Column="4" Margin="14,0,8,0" VerticalAlignment="Center" Text="Line spacing" Foreground="#AEB8C8" /><TextBox x:Name="LineSpacingBox" Grid.Column="5" />
+            </Grid>
+            <Grid Margin="0,3,0,20">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /><ColumnDefinition Width="54" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Window opacity" />
+              <Slider x:Name="OpacitySlider" Grid.Column="1" Minimum="0.2" Maximum="1" TickFrequency="0.05" ValueChanged="OnOpacityChanged" />
+              <TextBlock x:Name="OpacityValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="#C4A7FF" />
+            </Grid>
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Krypton colors" />
+            <UniformGrid Columns="2" Margin="0,0,0,18">
+              <StackPanel Margin="0,0,12,8"><TextBlock Text="Background" FontSize="9" Foreground="#78859A" /><TextBox x:Name="BackgroundColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,0,8"><TextBlock Text="Foreground" FontSize="9" Foreground="#78859A" /><TextBox x:Name="ForegroundColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,12,8"><TextBlock Text="Accent" FontSize="9" Foreground="#78859A" /><TextBox x:Name="AccentColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,0,8"><TextBlock Text="Selection" FontSize="9" Foreground="#78859A" /><TextBox x:Name="SelectionColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,12,8"><TextBlock Text="Cursor" FontSize="9" Foreground="#78859A" /><TextBox x:Name="CursorColorBox" /></StackPanel>
+              <StackPanel Margin="0,0,0,8"><TextBlock Text="Split divider" FontSize="9" Foreground="#78859A" /><TextBox x:Name="SplitDividerColorBox" /></StackPanel>
+            </UniformGrid>
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="ANSI 16-color palette" />
+            <UniformGrid x:Name="AnsiPalettePanel" Columns="4" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="BEHAVIOR">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="20">
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="History and interaction" />
+            <Grid Margin="0,0,0,8">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="210" /><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Scrollback lines" /><TextBox x:Name="ScrollbackBox" Grid.Column="1" />
+            </Grid>
+            <CheckBox x:Name="CopyOnSelectBox" Content="Copy selected text automatically" />
+            <CheckBox x:Name="ConfirmCloseBox" Content="Confirm before closing live sessions" />
+            <CheckBox x:Name="RestoreSessionBox" Content="Restore tabs, split layout, and profiles at startup" />
+            <CheckBox x:Name="FocusFollowsMouseBox" Content="Focus panes when the pointer enters them" />
+            <Grid Margin="0,10,0,8">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="210" /><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Bell" />
+              <ComboBox x:Name="BellBox" Grid.Column="1">
+                <ComboBoxItem Content="Visual" Tag="visual" /><ComboBoxItem Content="Audible" Tag="audible" /><ComboBoxItem Content="Off" Tag="off" />
+              </ComboBox>
+            </Grid>
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Margin="0,20,0,12" Text="Cursor and panes" />
+            <Grid Margin="0,0,0,8">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="210" /><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Cursor style" />
+              <ComboBox x:Name="CursorStyleBox" Grid.Column="1">
+                <ComboBoxItem Content="Bar" Tag="bar" /><ComboBoxItem Content="Block" Tag="block" /><ComboBoxItem Content="Underline" Tag="underline" />
+              </ComboBox>
+            </Grid>
+            <Grid Margin="0,0,0,12">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="210" /><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Cursor blink (ms)" /><TextBox x:Name="CursorBlinkBox" Grid.Column="1" />
+            </Grid>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="210" /><ColumnDefinition Width="*" /><ColumnDefinition Width="54" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Inactive pane opacity" />
+              <Slider x:Name="UnfocusedPaneOpacitySlider" Grid.Column="1" Minimum="0.15" Maximum="1" TickFrequency="0.05" ValueChanged="OnPaneOpacityChanged" />
+              <TextBlock x:Name="PaneOpacityValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="#C4A7FF" />
+            </Grid>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="PROFILES">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="20">
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Terminal profiles" />
+            <TextBlock Margin="0,0,0,12"
+                       Text="The + button opens the default profile. The terminal dropdown can launch any detected or saved profile."
+                       FontSize="9"
+                       Foreground="#78859A" />
+            <Grid Margin="0,0,0,18">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Default profile" />
+              <ComboBox x:Name="DefaultProfileBox" Grid.Column="1" />
+            </Grid>
+
+            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Detected on this PC" />
+            <WrapPanel x:Name="DetectedProfilesPanel" Margin="0,0,0,18" />
+
+            <Grid Margin="0,0,0,10">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Saved connections and commands" FontSize="15" FontWeight="SemiBold" Foreground="#C4A7FF" />
+                <TextBlock Margin="0,3,0,0" Text="SSH and custom profiles are written to portable profile.* config keys." FontSize="9" Foreground="#78859A" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Style="{StaticResource ActionButtonStyle}" Content="+ SSH PROFILE" Click="OnAddSshProfileClick" />
+                <Button Style="{StaticResource ActionButtonStyle}" Content="+ CUSTOM PROFILE" Click="OnAddCustomProfileClick" />
+              </StackPanel>
+            </Grid>
+            <StackPanel x:Name="ProfileEditorsPanel" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem x:Name="ConfigCodeTab" Header="CONFIG CODE">
+        <Grid Margin="16">
+          <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Generated stem.conf" FontSize="14" FontWeight="SemiBold" Foreground="#C4A7FF" />
+              <TextBlock Margin="0,4,0,10" Text="Edit this code directly, or regenerate it from the GUI controls." FontSize="9" Foreground="#78859A" />
+            </StackPanel>
+            <Button Grid.Column="1" Style="{StaticResource ActionButtonStyle}" Content="GENERATE FROM GUI" Click="OnGenerateCodeClick" />
+          </Grid>
+          <TextBox x:Name="ConfigCodeBox" Grid.Row="1" Height="Auto" Padding="12" AcceptsReturn="True" AcceptsTab="True"
+                   HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas"
+                   FontSize="11" TextWrapping="NoWrap" VerticalContentAlignment="Top" TextChanged="OnConfigCodeChanged" />
+          <TextBlock Grid.Row="2" Margin="0,8,0,0" Text="Manual code edits take precedence when you choose Save &amp; Apply."
+                     FontSize="9" Foreground="#667388" />
+        </Grid>
+      </TabItem>
+    </TabControl>
+
+    <Border Grid.Row="2" Padding="18,0" Background="#0B111D" BorderBrush="#233047" BorderThickness="0,1,0,0">
+      <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+        <TextBlock x:Name="SettingsStatus" VerticalAlignment="Center" FontSize="9" Foreground="#78859A"
+                   Text="Changes apply to the terminal when saved." />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button Style="{StaticResource ActionButtonStyle}" Content="CANCEL" Click="OnCancelClick" />
+          <Button Style="{StaticResource PrimaryButtonStyle}" Content="SAVE &amp; APPLY" Click="OnSaveClick" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

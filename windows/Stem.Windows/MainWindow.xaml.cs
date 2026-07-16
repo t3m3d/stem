@@ -29,6 +29,7 @@ public partial class MainWindow : Window
         public required TerminalView Terminal { get; init; }
         public required Border Surface { get; init; }
         public required TextBlock Badge { get; init; }
+        public required StemProfile Profile { get; init; }
         public ConPtySession? Session { get; set; }
         public string DisplayName { get; set; } = "PowerShell";
         public string WindowTitle { get; set; } = "PowerShell";
@@ -68,12 +69,12 @@ public partial class MainWindow : Window
 
     private StemSettings _settings;
     private readonly List<SessionTab> _tabs = [];
+    private IReadOnlyList<StemProfile> _profiles = [];
     private SessionTab? _activeTab;
     private DateTime _configWriteTimeUtc;
     private int _nextTabId = 1;
     private bool _started;
     private bool _closingConfirmed;
-    private bool _workspaceVisible = true;
 
     private TerminalPane? ActivePane => _activeTab?.ActivePane;
     private TerminalView? ActiveTerminal => ActivePane?.Terminal;
@@ -81,7 +82,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        DarkWindowTheme.Apply(this);
         _settings = StemSettings.Load();
+        _profiles = StemProfileCatalog.Discover(_settings);
         var initialTab = CreateTab(startSession: false);
         ActivateTab(initialTab);
         ApplySettings(_settings, initial: true);
@@ -94,7 +97,9 @@ public partial class MainWindow : Window
         UpdateWindowChrome();
     }
 
-    private SessionTab CreateTab(bool startSession)
+    private StemProfile DefaultProfile() => StemProfileCatalog.Default(_settings, _profiles);
+
+    private SessionTab CreateTab(bool startSession, StemProfile? profile = null)
     {
         var id = _nextTabId++;
         var title = new TextBlock
@@ -152,8 +157,9 @@ public partial class MainWindow : Window
         };
         _tabs.Add(tab);
         TabStrip.Children.Add(chip);
+        chip.ContextMenu = BuildTabContextMenu(tab);
 
-        var pane = CreatePane(tab, startSession: false);
+        var pane = CreatePane(tab, startSession: false, profile ?? DefaultProfile());
         tab.Root = new PaneLeaf(pane);
         tab.ActivePane = pane;
         RebuildTabLayout(tab);
@@ -167,7 +173,26 @@ public partial class MainWindow : Window
         return tab;
     }
 
-    private TerminalPane CreatePane(SessionTab tab, bool startSession)
+    private ContextMenu BuildTabContextMenu(SessionTab tab)
+    {
+        var menu = new ContextMenu();
+        menu.Items.Add(MenuAction("New tab", "Ctrl+Shift+T", OnNewTabClick));
+        menu.Items.Add(MenuAction("Split right", "Alt+Shift+Plus", OnSplitRightClick));
+        menu.Items.Add(MenuAction("Split down", "Alt+Shift+Minus", OnSplitDownClick));
+        menu.Items.Add(new Separator());
+        var close = MenuAction("Close tab", "Ctrl+Shift+W", (_, _) => CloseTab(tab.Id));
+        menu.Items.Add(close);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuAction("Settings...", string.Empty, OnSettingsClick));
+        menu.Opened += (_, _) =>
+        {
+            ActivateTab(tab);
+            close.IsEnabled = _tabs.Count > 1 || tab.Panes.Count > 0;
+        };
+        return menu;
+    }
+
+    private TerminalPane CreatePane(SessionTab tab, bool startSession, StemProfile profile)
     {
         var paneId = tab.NextPaneId++;
         var terminal = new TerminalView
@@ -215,16 +240,41 @@ public partial class MainWindow : Window
             Id = paneId,
             Terminal = terminal,
             Surface = surface,
-            Badge = badgeText
+            Badge = badgeText,
+            Profile = profile
         };
         tab.Panes.Add(pane);
         HookTerminal(tab, pane);
+        terminal.ContextMenu = BuildTerminalContextMenu(tab, pane);
 
         if (startSession && IsLoaded)
         {
             StartPaneSession(tab, pane);
         }
         return pane;
+    }
+
+    private ContextMenu BuildTerminalContextMenu(SessionTab tab, TerminalPane pane)
+    {
+        var menu = new ContextMenu();
+        var copy = MenuAction("Copy", "Ctrl+Shift+C", (_, _) => pane.Terminal.CopySelection());
+        menu.Items.Add(copy);
+        menu.Items.Add(MenuAction("Paste", "Ctrl+Shift+V", (_, _) => pane.Terminal.PasteClipboard()));
+        menu.Items.Add(MenuAction("Select visible terminal", "Ctrl+Shift+A", (_, _) => pane.Terminal.SelectViewport()));
+        menu.Items.Add(MenuAction("Find", "Ctrl+Shift+F", OnFindClick));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuAction("Split right", "Alt+Shift+Plus", OnSplitRightClick));
+        menu.Items.Add(MenuAction("Split down", "Alt+Shift+Minus", OnSplitDownClick));
+        menu.Items.Add(MenuAction("Close pane", "Ctrl+Shift+W", OnClosePaneClick));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuAction("Settings...", string.Empty, OnSettingsClick));
+        menu.Opened += (_, _) =>
+        {
+            ActivatePane(tab, pane, focus: false);
+            copy.IsEnabled = pane.Terminal.HasSelection;
+        };
+        menu.Closed += (_, _) => pane.Terminal.Focus();
+        return menu;
     }
 
     private void HookTerminal(SessionTab tab, TerminalPane pane)
@@ -294,8 +344,8 @@ public partial class MainWindow : Window
         }
         pane.Started = true;
 
-        var commandLine = ShellCommand.Resolve(_settings.Shell);
-        pane.DisplayName = ShellCommand.DisplayName(commandLine);
+        var commandLine = pane.Profile.CommandLine;
+        pane.DisplayName = pane.Profile.Name;
         pane.WindowTitle = pane.DisplayName;
         SetPaneStatus(tab, pane, "STARTING", Color.FromRgb(228, 184, 86));
         UpdateTabTitle(tab);
@@ -306,7 +356,7 @@ public partial class MainWindow : Window
                 commandLine,
                 pane.Terminal.Columns,
                 pane.Terminal.Rows,
-                _settings.WorkingDirectory,
+                pane.Profile.WorkingDirectory,
                 _settings.Term);
             pane.Session.OutputReceived += bytes =>
                 _ = Dispatcher.InvokeAsync(() => pane.Terminal.Write(bytes));
@@ -350,7 +400,6 @@ public partial class MainWindow : Window
         {
             SetConnectionState(text, color);
         }
-        UpdateWorkspaceDeck();
     }
 
     private void ActivateTab(SessionTab tab)
@@ -420,7 +469,6 @@ public partial class MainWindow : Window
         var pane = tab.ActivePane;
         var paneCount = tab.Panes.Count > 1 ? $"  \u2022  {tab.Panes.Count} PANES" : string.Empty;
         tab.TabTitle.Text = $"{tab.Id}  {pane.DisplayName.ToUpperInvariant()}{paneCount}";
-        UpdateWorkspaceDeck();
     }
 
     private void UpdateTabStyles()
@@ -587,7 +635,7 @@ public partial class MainWindow : Window
         }
 
         tab.ZoomedPane = null;
-        var pane = CreatePane(tab, startSession: false);
+        var pane = CreatePane(tab, startSession: false, active.Profile);
         var branch = new PaneBranch(sideBySide, new PaneLeaf(active), new PaneLeaf(pane));
         tab.Root = ReplaceLeaf(tab.Root, active, branch);
         tab.ActivePane = pane;
@@ -738,21 +786,89 @@ public partial class MainWindow : Window
 
     private void OnTogglePaneZoomClick(object sender, RoutedEventArgs e) => TogglePaneZoom();
 
-    private void OnToggleWorkspaceClick(object sender, RoutedEventArgs e) => ToggleWorkspaceDeck();
-
-    private void OnOpenConfigClick(object sender, RoutedEventArgs e)
+    private void OnSessionMenuClick(object sender, RoutedEventArgs e)
     {
-        try
+        if (sender is Button { ContextMenu: { } menu } button)
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = StemSettings.ConfigPath,
-                UseShellExecute = true
-            });
+            PopulateSessionMenu(menu);
+            menu.PlacementTarget = button;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.IsOpen = true;
         }
-        catch (Exception ex)
+    }
+
+    private void PopulateSessionMenu(ContextMenu menu)
+    {
+        menu.Items.Clear();
+        var defaultProfile = DefaultProfile();
+        var newTab = new MenuItem { Header = "New tab" };
+        foreach (var profile in _profiles)
         {
-            MessageBox.Show(this, ex.Message, "Could not open stem.conf", MessageBoxButton.OK, MessageBoxImage.Error);
+            var prefix = profile.Kind switch
+            {
+                StemProfileKind.Wsl => "WSL  ",
+                StemProfileKind.Ssh => "SSH  ",
+                StemProfileKind.Custom => "APP  ",
+                _ => "SHELL  "
+            };
+            var item = new MenuItem
+            {
+                Header = prefix + profile.Name +
+                    (profile.Id.Equals(defaultProfile.Id, StringComparison.OrdinalIgnoreCase)
+                        ? "  (default)"
+                        : string.Empty),
+                Tag = profile.Id
+            };
+            item.Click += OnNewProfileTabClick;
+            newTab.Items.Add(item);
+        }
+        menu.Items.Add(newTab);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuAction("Split right", "Alt+Shift+Plus", OnSplitRightClick));
+        menu.Items.Add(MenuAction("Split down", "Alt+Shift+Minus", OnSplitDownClick));
+        menu.Items.Add(MenuAction("Zoom / restore pane", "Alt+Shift+Enter", OnTogglePaneZoomClick));
+        menu.Items.Add(MenuAction("Close pane", "Ctrl+Shift+W", OnClosePaneClick));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuAction("Find", "Ctrl+Shift+F", OnFindClick));
+        menu.Items.Add(MenuAction("Settings...", string.Empty, OnSettingsClick));
+    }
+
+    private static MenuItem MenuAction(
+        string header,
+        string shortcut,
+        RoutedEventHandler handler)
+    {
+        var item = new MenuItem { Header = header, InputGestureText = shortcut };
+        item.Click += handler;
+        return item;
+    }
+
+    private void OnNewProfileTabClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string id })
+        {
+            return;
+        }
+
+        var profile = _profiles.FirstOrDefault(candidate =>
+            candidate.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (profile is not null)
+        {
+            ActivateTab(CreateTab(startSession: true, profile));
+        }
+    }
+
+    private void OnSettingsClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SettingsWindow(_settings) { Owner = this };
+        if (dialog.ShowDialog() == true)
+        {
+            _settings = StemSettings.Load(StemSettings.ConfigPath);
+            _profiles = StemProfileCatalog.Discover(_settings);
+            _configWriteTimeUtc = ConfigWriteTimeUtc();
+            ApplySettings(_settings, initial: false);
+            RefreshActiveChrome();
+            ActiveTerminal?.Focus();
         }
     }
 
@@ -840,13 +956,6 @@ public partial class MainWindow : Window
         if (alt && shift && e.Key == Key.Enter)
         {
             TogglePaneZoom();
-            e.Handled = true;
-            return;
-        }
-
-        if (control && !shift && e.Key == Key.B)
-        {
-            ToggleWorkspaceDeck();
             e.Handled = true;
             return;
         }
@@ -996,6 +1105,7 @@ public partial class MainWindow : Window
 
         _configWriteTimeUtc = writeTime;
         _settings = StemSettings.Load(StemSettings.ConfigPath);
+        _profiles = StemProfileCatalog.Discover(_settings);
         ApplySettings(_settings, initial: false);
     }
 
@@ -1011,7 +1121,6 @@ public partial class MainWindow : Window
         }
         Opacity = settings.Opacity;
         Title = settings.WindowTitle;
-
         if (!initial || ActiveTerminal is not { } terminal)
         {
             return;
@@ -1019,7 +1128,7 @@ public partial class MainWindow : Window
 
         var grid = terminal.EstimatedGridSize(settings.Columns, settings.Rows);
         var workArea = SystemParameters.WorkArea;
-        Width = Math.Clamp(grid.Width + 270, MinWidth, Math.Max(MinWidth, workArea.Width * 0.94));
+        Width = Math.Clamp(grid.Width + 38, MinWidth, Math.Max(MinWidth, workArea.Width * 0.94));
         Height = Math.Clamp(grid.Height + 134, MinHeight, Math.Max(MinHeight, workArea.Height * 0.94));
     }
 

@@ -84,6 +84,16 @@ static void TestTerminalBuffer()
     Assert(searchable.FindText("missing").Count == 0, "missing search returns no matches");
 }
 
+static void TestProfiles()
+{
+    var output = string.Concat(
+        "Ubuntu", (char)0, (char)13, (char)10,
+        "Debian", (char)0, (char)13, (char)10,
+        "Ubuntu", (char)0);
+    var distributions = StemProfileCatalog.ParseWslDistributionOutput(output);
+    Assert(distributions.SequenceEqual(["Ubuntu", "Debian"]), "WSL distribution output is normalized");
+}
+
 static void TestSettings()
 {
     var path = Path.Combine(Path.GetTempPath(), $"stem-settings-{Guid.NewGuid():N}.conf");
@@ -102,6 +112,11 @@ static void TestSettings()
             padding = 12
             line_spacing = 2
             opacity = 0.72
+            default_profile = ssh-prod
+            profile.ssh-prod.name = Production SSH
+            profile.ssh-prod.kind = ssh
+            profile.ssh-prod.command = ssh ops@example.com
+            profile.ssh-prod.working_directory = C:\work
             scrollback_lines = 4321
             cursor_blink_ms = 0
             cursor_style = block
@@ -139,6 +154,13 @@ static void TestSettings()
         Assert(settings.AnsiPalette[1] == new TerminalColor(0xAA, 0x11, 0x22), "configured ANSI palette");
         Assert(settings.CopyOnSelect, "configured copy-on-select");
         Assert(settings.ConfirmClose, "configured close confirmation");
+        Assert(settings.DefaultProfile == "ssh-prod", "configured default profile");
+        Assert(settings.Profiles.Count == 1, "configured profile count");
+        Assert(settings.Profiles[0].Name == "Production SSH" && settings.Profiles[0].Kind == StemProfileKind.Ssh, "configured terminal profile");
+        Assert(settings.Profiles[0].CommandLine == "ssh ops@example.com", "configured profile command");
+
+        File.WriteAllText(path, "title = STEM - Krypton Terminal");
+        Assert(StemSettings.Load(path).WindowTitle == "STEM", "legacy default title is cleaned up");
     }
     finally
     {
@@ -212,6 +234,7 @@ static async Task TestConPtyAsync()
 }
 
 TestTerminalBuffer();
+TestProfiles();
 TestSettings();
 await TestConPtyAsync();
 Console.WriteLine("PASS: VT grid + PowerShell ConPTY round trip");
