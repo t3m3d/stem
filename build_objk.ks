@@ -51,6 +51,7 @@ just run {
     exec("cp /tmp/stem.bin \"" + app + "/Contents/MacOS/stem\"")
     exec("chmod +x \"" + app + "/Contents/MacOS/stem\"")
     if isFile("stem.icns") == "yes" { exec("cp stem.icns \"" + app + "/Contents/Resources/stem.icns\"") }
+    if isFile("stem.conf") == "yes" { exec("cp stem.conf \"" + app + "/Contents/Resources/stem.conf\"") }
 
     let q = fromCharCode(34)
     let plist = "<?xml version=" + q + "1.0" + q + " encoding=" + q + "UTF-8" + q + "?>\n" +
