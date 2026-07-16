@@ -1567,6 +1567,17 @@ just run {
   let i = 0
   while i < 2000000000 {
     cocoaPumpEvents(app)
+    // cocoaPumpEvents can dispatch the main window's close event. Stop before
+    // touching its views again: AppKit may already have released their native
+    // backing objects even though our associated pointers still exist.
+    if msg(win, "isVisible") == 0 {
+      fdClose(m0)
+      fdClose(m1)
+      fdClose(m2)
+      fdClose(m3)
+      msg_1(app, "terminate:", app)
+      exit("0")
+    }
     let masters = cocoaGetAssocKey(app, "stem.pmasters")
     let pviews = cocoaGetAssocKey(app, "stem.pviews")
     let pdocs = cocoaGetAssocKey(app, "stem.pdocs")
