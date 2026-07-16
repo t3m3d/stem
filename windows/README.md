@@ -54,6 +54,9 @@ single-executable package, and writes these artifacts under `dist/`:
 - `stem-<version>-win-x64.zip.sha256`
 - `stem-<four-part-version>-x64.msix`
 - `stem-<four-part-version>-x64.msix.sha256`
+- `stem-<four-part-version>-x64.msixupload` (preferred Partner Center upload)
+- `stem-<four-part-version>-x64.msixupload.sha256`
+- `stem-<four-part-version>-x64.appxsym` (portable crash-analysis symbols)
 
 The MSIX uses the Microsoft Store identity `t3m3d.StemTerminalforWindows`
 and signs with a valid Current User code-signing certificate whose subject is

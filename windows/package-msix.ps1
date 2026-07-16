@@ -14,15 +14,17 @@ $ErrorActionPreference = "Stop"
 $identityName = "t3m3d.StemTerminalforWindows"
 $publisher = "CN=97613709-C254-4F66-AB6B-1EE4BA3D003F"
 $publisherDisplayName = "t3m3d"
+$displayName = "Stem: Terminal for Windows"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $project = Join-Path $PSScriptRoot "Stem.Windows\Stem.Windows.csproj"
 $manifestTemplate = Join-Path $PSScriptRoot "packaging\AppxManifest.xml"
-$sourceIcon = Join-Path $PSScriptRoot "Stem.Windows\stem.ico"
 $dist = [IO.Path]::GetFullPath((Join-Path $root "dist"))
 $workRoot = [IO.Path]::GetFullPath((Join-Path $dist "msix-work"))
 $layout = [IO.Path]::GetFullPath((Join-Path $workRoot "layout"))
 $validation = [IO.Path]::GetFullPath((Join-Path $workRoot "validation"))
 $artifact = Join-Path $dist "stem-$Version-x64.msix"
+$symbolArtifact = Join-Path $dist "stem-$Version-x64.appxsym"
+$uploadArtifact = Join-Path $dist "stem-$Version-x64.msixupload"
 
 foreach ($part in $Version.Split('.')) {
     if ([int]$part -gt 65535) {
@@ -69,8 +71,8 @@ $publishArguments = @(
     "--self-contained", "true",
     "-p:PublishSingleFile=true",
     "-p:IncludeNativeLibrariesForSelfExtract=true",
-    "-p:DebugType=None",
-    "-p:DebugSymbols=false",
+    "-p:DebugType=portable",
+    "-p:DebugSymbols=true",
     "-p:Version=$assemblyVersion",
     "--output", $layout
 )
@@ -84,49 +86,106 @@ $manifest.Package.Identity.Version = $Version
 $manifest.Package.Identity.Name = $identityName
 $manifest.Package.Identity.Publisher = $publisher
 $manifest.Package.Properties.PublisherDisplayName = $publisherDisplayName
+$manifest.Package.Properties.DisplayName = $displayName
+$manifest.Package.Applications.Application.VisualElements.DisplayName = $displayName
 $manifest.Save((Join-Path $layout "AppxManifest.xml"))
 
 Add-Type -AssemblyName System.Drawing
-$source = [Drawing.Icon]::new($sourceIcon).ToBitmap()
-try {
-    function New-StemLogo {
-        param(
-            [Parameter(Mandatory)] [string]$Path,
-            [Parameter(Mandatory)] [int]$Width,
-            [Parameter(Mandatory)] [int]$Height,
-            [double]$Scale = 0.78
-        )
+function New-StemLogo {
+    param(
+        [Parameter(Mandatory)] [string]$Path,
+        [Parameter(Mandatory)] [int]$Width,
+        [Parameter(Mandatory)] [int]$Height,
+        [double]$Scale = 0.78
+    )
 
-        $canvas = [Drawing.Bitmap]::new($Width, $Height, [Drawing.Imaging.PixelFormat]::Format32bppArgb)
-        $graphics = [Drawing.Graphics]::FromImage($canvas)
+    $canvas = [Drawing.Bitmap]::new($Width, $Height, [Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $graphics = [Drawing.Graphics]::FromImage($canvas)
+    try {
+        $graphics.Clear([Drawing.Color]::Transparent)
+        $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $graphics.CompositingQuality = [Drawing.Drawing2D.CompositingQuality]::HighQuality
+        $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.TextRenderingHint = [Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+
+        $size = [Math]::Max(1, [single]([Math]::Min($Width, $Height) * $Scale))
+        $x = [single](($Width - $size) / 2)
+        $y = [single](($Height - $size) / 2)
+        $radius = [single]($size * 0.22)
+        $diameter = [single]($radius * 2)
+        $rect = [Drawing.RectangleF]::new($x, $y, $size, $size)
+        $shape = [Drawing.Drawing2D.GraphicsPath]::new()
+        $shape.AddArc($x, $y, $diameter, $diameter, 180, 90)
+        $shape.AddArc($x + $size - $diameter, $y, $diameter, $diameter, 270, 90)
+        $shape.AddArc($x + $size - $diameter, $y + $size - $diameter, $diameter, $diameter, 0, 90)
+        $shape.AddArc($x, $y + $size - $diameter, $diameter, $diameter, 90, 90)
+        $shape.CloseFigure()
+
+        $fill = [Drawing.Drawing2D.LinearGradientBrush]::new(
+            $rect,
+            [Drawing.ColorTranslator]::FromHtml("#7C3AED"),
+            [Drawing.ColorTranslator]::FromHtml("#2E1065"),
+            45.0)
+        $outline = [Drawing.Pen]::new(
+            [Drawing.ColorTranslator]::FromHtml("#D7C3FF"),
+            [single][Math]::Max(1, $size * 0.025))
+        $font = [Drawing.Font]::new(
+            "Segoe UI",
+            [single]($size * 0.48),
+            [Drawing.FontStyle]::Bold,
+            [Drawing.GraphicsUnit]::Pixel)
+        $format = [Drawing.StringFormat]::new()
+        $format.Alignment = [Drawing.StringAlignment]::Center
+        $format.LineAlignment = [Drawing.StringAlignment]::Center
+        $letter = [Drawing.SolidBrush]::new([Drawing.Color]::White)
         try {
-            $graphics.Clear([Drawing.Color]::Transparent)
-            $graphics.CompositingQuality = [Drawing.Drawing2D.CompositingQuality]::HighQuality
-            $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-            $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-            $size = [Math]::Max(1, [int]([Math]::Min($Width, $Height) * $Scale))
-            $x = [int](($Width - $size) / 2)
-            $y = [int](($Height - $size) / 2)
-            $graphics.DrawImage($source, $x, $y, $size, $size)
-            $canvas.Save($Path, [Drawing.Imaging.ImageFormat]::Png)
+            $graphics.FillPath($fill, $shape)
+            $graphics.DrawPath($outline, $shape)
+            $graphics.DrawString("K", $font, $letter, $rect, $format)
         }
         finally {
-            $graphics.Dispose()
-            $canvas.Dispose()
+            $letter.Dispose()
+            $format.Dispose()
+            $font.Dispose()
+            $outline.Dispose()
+            $fill.Dispose()
+            $shape.Dispose()
         }
+        $canvas.Save($Path, [Drawing.Imaging.ImageFormat]::Png)
     }
+    finally {
+        $graphics.Dispose()
+        $canvas.Dispose()
+    }
+}
 
-    $assets = Join-Path $layout "Assets"
-    New-StemLogo (Join-Path $assets "StoreLogo.png") 50 50 0.80
-    New-StemLogo (Join-Path $assets "Square44x44Logo.png") 44 44 0.74
-    New-StemLogo (Join-Path $assets "Square150x150Logo.png") 150 150 0.78
-    New-StemLogo (Join-Path $assets "Square310x310Logo.png") 310 310 0.66
-    New-StemLogo (Join-Path $assets "Wide310x150Logo.png") 310 150 0.72
-    New-StemLogo (Join-Path $assets "SplashScreen.png") 620 300 0.62
+$assets = Join-Path $layout "Assets"
+New-StemLogo (Join-Path $assets "StoreLogo.png") 50 50 0.80
+New-StemLogo (Join-Path $assets "Square44x44Logo.png") 44 44 0.74
+New-StemLogo (Join-Path $assets "Square150x150Logo.png") 150 150 0.78
+New-StemLogo (Join-Path $assets "Square310x310Logo.png") 310 310 0.66
+New-StemLogo (Join-Path $assets "Wide310x150Logo.png") 310 150 0.72
+New-StemLogo (Join-Path $assets "SplashScreen.png") 620 300 0.62
+
+$symbolFiles = @(Get-ChildItem -LiteralPath $layout -Filter *.pdb -Recurse)
+if ($symbolFiles.Count -eq 0) {
+    throw "The Store publish did not produce portable symbols."
 }
-finally {
-    $source.Dispose()
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$symbolStage = Join-Path $workRoot "symbols"
+New-Item -ItemType Directory -Path $symbolStage -Force | Out-Null
+foreach ($symbol in $symbolFiles) {
+    Copy-Item -LiteralPath $symbol.FullName -Destination (Join-Path $symbolStage $symbol.Name) -Force
+    Remove-Item -LiteralPath $symbol.FullName -Force
 }
+if (Test-Path -LiteralPath $symbolArtifact) {
+    Remove-Item -LiteralPath $symbolArtifact -Force
+}
+[IO.Compression.ZipFile]::CreateFromDirectory(
+    $symbolStage,
+    $symbolArtifact,
+    [IO.Compression.CompressionLevel]::Optimal,
+    $false)
 
 Copy-Item (Join-Path $root "LICENSE") $layout -Force
 Copy-Item (Join-Path $PSScriptRoot "README.md") (Join-Path $layout "WINDOWS-README.md") -Force
@@ -167,7 +226,18 @@ if (!$Unsigned) {
     }
     & $signTool verify /pa /v $artifact
     if ($LASTEXITCODE -ne 0) {
-        throw "The MSIX signature did not verify."
+        $signature = Get-AuthenticodeSignature -LiteralPath $artifact
+        $expectedStoreCertificateWarning =
+            $null -ne $signature.SignerCertificate -and
+            $signature.SignatureType -eq [System.Management.Automation.SignatureType]::Authenticode -and
+            $signature.SignerCertificate.Subject -eq $publisher -and
+            $signature.SignerCertificate.Thumbprint -eq $signingCertificate.Thumbprint -and
+            $signature.Status -eq [System.Management.Automation.SignatureStatus]::UnknownError -and
+            $signature.StatusMessage -match "root certificate which is not trusted"
+        if (!$expectedStoreCertificateWarning) {
+            throw "The MSIX signature did not verify."
+        }
+        Write-Warning "The package signature is intact and the publisher matches, but the self-signed Store certificate is not rooted locally. Microsoft Store ingestion will re-sign the package."
     }
 }
 
@@ -182,6 +252,7 @@ if ($LASTEXITCODE -ne 0) {
 if ($packedManifest.Package.Identity.Name -ne $identityName -or
     $packedManifest.Package.Identity.Publisher -ne $publisher -or
     $packedManifest.Package.Identity.Version -ne $Version -or
+    $packedManifest.Package.Properties.DisplayName -ne $displayName -or
     $packedManifest.Package.Properties.PublisherDisplayName -ne $publisherDisplayName) {
     throw "The packed manifest identity does not match the Microsoft Store reservation."
 }
@@ -189,13 +260,32 @@ if ($packedManifest.Package.Identity.Name -ne $identityName -or
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant()
 Set-Content -LiteralPath "$artifact.sha256" -Encoding ascii -Value "$hash  $([IO.Path]::GetFileName($artifact))"
 
+$uploadStage = Join-Path $workRoot "upload"
+New-Item -ItemType Directory -Path $uploadStage -Force | Out-Null
+Copy-Item -LiteralPath $artifact -Destination $uploadStage -Force
+Copy-Item -LiteralPath $symbolArtifact -Destination $uploadStage -Force
+if (Test-Path -LiteralPath $uploadArtifact) {
+    Remove-Item -LiteralPath $uploadArtifact -Force
+}
+[IO.Compression.ZipFile]::CreateFromDirectory(
+    $uploadStage,
+    $uploadArtifact,
+    [IO.Compression.CompressionLevel]::Optimal,
+    $false)
+$uploadHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $uploadArtifact).Hash.ToLowerInvariant()
+Set-Content -LiteralPath "$uploadArtifact.sha256" -Encoding ascii -Value "$uploadHash  $([IO.Path]::GetFileName($uploadArtifact))"
+
 Write-Host "MSIX $artifact"
 Write-Host "Identity $identityName"
 Write-Host "Publisher $publisher"
 Write-Host "PublisherDisplayName $publisherDisplayName"
+Write-Host "DisplayName $displayName"
 Write-Host "Version $Version"
 Write-Host "Signed $(!$Unsigned)"
 if ($null -ne $signingCertificate) {
     Write-Host "Certificate $($signingCertificate.Thumbprint)"
 }
 Write-Host "SHA256 $hash"
+Write-Host "MSIXUPLOAD $uploadArtifact"
+Write-Host "MSIXUPLOAD-SHA256 $uploadHash"
+Write-Host "Symbols $symbolArtifact"
