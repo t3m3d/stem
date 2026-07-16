@@ -3,18 +3,44 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
   <Application.Resources>
-    <SolidColorBrush x:Key="KryptonBackgroundBrush" Color="#070A12" />
-    <SolidColorBrush x:Key="KryptonPanelBrush" Color="#0C111C" />
-    <SolidColorBrush x:Key="KryptonShellBrush" Color="#05070C" />
-    <SolidColorBrush x:Key="KryptonTextBrush" Color="#D8DAD4" />
-    <SolidColorBrush x:Key="KryptonMutedBrush" Color="#7E899B" />
+    <!-- Defaults are Krypton Dark. KryptonTheme swaps these resources at runtime. -->
+    <Color x:Key="KryptonShellStartColor">#4C1D95</Color>
+    <Color x:Key="KryptonShellMidColor">#6D28D9</Color>
+    <Color x:Key="KryptonShellEndColor">#2E1065</Color>
+    <Color x:Key="KryptonFrameStartColor">#D7C3FF</Color>
+    <Color x:Key="KryptonFrameEndColor">#6D28D9</Color>
+    <Color x:Key="KryptonWavePrimaryColor">#58FFFFFF</Color>
+    <Color x:Key="KryptonWaveSecondaryColor">#48C4A7FF</Color>
+
+    <SolidColorBrush x:Key="KryptonBackgroundBrush" Color="#10081D" />
+    <SolidColorBrush x:Key="KryptonPanelBrush" Color="#180C2A" />
+    <SolidColorBrush x:Key="KryptonShellBrush" Color="#260D46" />
+    <SolidColorBrush x:Key="KryptonTerminalChromeBrush" Color="#07050C" />
+    <SolidColorBrush x:Key="KryptonFieldBrush" Color="#0B0712" />
+    <SolidColorBrush x:Key="KryptonTextBrush" Color="#F0EBFA" />
+    <SolidColorBrush x:Key="KryptonStrongTextBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="KryptonTitleTextBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="KryptonMutedBrush" Color="#B4A8C8" />
+    <SolidColorBrush x:Key="KryptonSubtleBrush" Color="#746985" />
     <SolidColorBrush x:Key="KryptonAccentBrush" Color="#8B5CF6" />
-    <SolidColorBrush x:Key="KryptonAccentHighlightBrush" Color="#C4A7FF" />
+    <SolidColorBrush x:Key="KryptonAccentHighlightBrush" Color="#D7C3FF" />
+    <SolidColorBrush x:Key="KryptonBorderBrush" Color="#654698" />
+    <SolidColorBrush x:Key="KryptonFrameBrush" Color="#B79AFF" />
+    <SolidColorBrush x:Key="KryptonMenuBrush" Color="#160D25" />
+    <SolidColorBrush x:Key="KryptonMenuHoverBrush" Color="#3A1D64" />
+    <SolidColorBrush x:Key="KryptonMenuSelectedBrush" Color="#512B82" />
+    <SolidColorBrush x:Key="KryptonStatusBrush" Color="#170A29" />
+    <SolidColorBrush x:Key="KryptonChromeHoverBrush" Color="#24FFFFFF" />
+    <SolidColorBrush x:Key="KryptonChromePressedBrush" Color="#38FFFFFF" />
+    <SolidColorBrush x:Key="KryptonDangerBrush" Color="#C63C51" />
+    <SolidColorBrush x:Key="KryptonWarningBrush" Color="#E4B856" />
+    <SolidColorBrush x:Key="KryptonSelectionBrush" Color="#3A2A60" />
+    <SolidColorBrush x:Key="KryptonShadowBrush" Color="#AA000000" />
 
     <Style TargetType="Window">
       <Setter Property="FontFamily" Value="Segoe UI" />
-      <Setter Property="Background" Value="{StaticResource KryptonBackgroundBrush}" />
-      <Setter Property="Foreground" Value="{StaticResource KryptonTextBrush}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
     </Style>
 
     <Style x:Key="ChromeButtonStyle" TargetType="Button">
@@ -24,26 +50,23 @@
       <Setter Property="Padding" Value="0" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="#AAB4C4" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTitleTextBrush}" />
       <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
       <Setter Property="FontSize" Value="10" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="ChromeSurface"
-                    Background="{TemplateBinding Background}"
-                    CornerRadius="5">
-              <ContentPresenter HorizontalAlignment="Center"
-                                VerticalAlignment="Center" />
+            <Border x:Name="ChromeSurface" Background="{TemplateBinding Background}" CornerRadius="5">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="ChromeSurface" Property="Background" Value="#1A2231" />
-                <Setter Property="Foreground" Value="#FFFFFF" />
+                <Setter TargetName="ChromeSurface" Property="Background" Value="{DynamicResource KryptonChromeHoverBrush}" />
+                <Setter Property="Foreground" Value="White" />
               </Trigger>
               <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="ChromeSurface" Property="Background" Value="#263247" />
+                <Setter TargetName="ChromeSurface" Property="Background" Value="{DynamicResource KryptonChromePressedBrush}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -51,21 +74,19 @@
       </Setter>
     </Style>
 
-    <Style x:Key="CloseButtonStyle"
-           TargetType="Button"
-           BasedOn="{StaticResource ChromeButtonStyle}">
+    <Style x:Key="CloseButtonStyle" TargetType="Button" BasedOn="{StaticResource ChromeButtonStyle}">
       <Style.Triggers>
         <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="#C63C51" />
-          <Setter Property="Foreground" Value="#FFFFFF" />
+          <Setter Property="Background" Value="{DynamicResource KryptonDangerBrush}" />
+          <Setter Property="Foreground" Value="White" />
         </Trigger>
       </Style.Triggers>
     </Style>
 
     <Style x:Key="KryptonContextMenuStyle" TargetType="{x:Type ContextMenu}">
-      <Setter Property="Background" Value="#0D1420" />
-      <Setter Property="Foreground" Value="#E8E2F5" />
-      <Setter Property="BorderBrush" Value="#6D8B5CF6" />
+      <Setter Property="Background" Value="{DynamicResource KryptonMenuBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KryptonBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="Padding" Value="4" />
       <Setter Property="HasDropShadow" Value="True" />
@@ -73,11 +94,8 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="{x:Type ContextMenu}">
-            <Border Margin="2"
-                    Padding="{TemplateBinding Padding}"
-                    CornerRadius="8"
-                    Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
+            <Border Margin="2" Padding="{TemplateBinding Padding}" CornerRadius="8"
+                    Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}">
               <Border.Effect>
                 <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.55" Color="#000000" />
@@ -96,60 +114,37 @@
       <Setter Property="MinWidth" Value="210" />
       <Setter Property="Height" Value="31" />
       <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="#E8E2F5" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
       <Setter Property="FontSize" Value="10.5" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="{x:Type MenuItem}">
-            <Grid x:Name="MenuRoot"
-                  MinHeight="{TemplateBinding Height}"
-                  Background="{TemplateBinding Background}"
-                  SnapsToDevicePixels="True">
+            <Grid x:Name="MenuRoot" MinHeight="{TemplateBinding Height}"
+                  Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="24" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="18" />
               </Grid.ColumnDefinitions>
-              <TextBlock x:Name="CheckMark"
-                         Text="✓"
-                         Visibility="Collapsed"
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Center"
-                         Foreground="#C4A7FF" />
-              <ContentPresenter Grid.Column="1"
-                                Margin="4,0,12,0"
-                                VerticalAlignment="Center"
-                                ContentSource="Header"
-                                RecognizesAccessKey="True" />
-              <TextBlock Grid.Column="2"
-                         Margin="12,0,8,0"
-                         VerticalAlignment="Center"
-                         Text="{TemplateBinding InputGestureText}"
-                         FontSize="9"
-                         Foreground="#7E899B" />
-              <TextBlock x:Name="SubmenuArrow"
-                         Grid.Column="3"
-                         Text="›"
-                         Visibility="Collapsed"
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Center"
-                         FontSize="15"
-                         Foreground="#A78BFA" />
-              <Popup x:Name="PART_Popup"
-                     Placement="Right"
-                     HorizontalOffset="-3"
-                     AllowsTransparency="True"
-                     Focusable="False"
-                     PopupAnimation="Fade"
+              <TextBlock x:Name="CheckMark" Text="✓" Visibility="Collapsed"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Foreground="{DynamicResource KryptonAccentHighlightBrush}" />
+              <ContentPresenter Grid.Column="1" Margin="4,0,12,0" VerticalAlignment="Center"
+                                ContentSource="Header" RecognizesAccessKey="True" />
+              <TextBlock Grid.Column="2" Margin="12,0,8,0" VerticalAlignment="Center"
+                         Text="{TemplateBinding InputGestureText}" FontSize="9"
+                         Foreground="{DynamicResource KryptonMutedBrush}" />
+              <TextBlock x:Name="SubmenuArrow" Grid.Column="3" Text="›" Visibility="Collapsed"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="15"
+                         Foreground="{DynamicResource KryptonAccentBrush}" />
+              <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="-3"
+                     AllowsTransparency="True" Focusable="False" PopupAnimation="Fade"
                      IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
-                <Border Margin="2"
-                        Padding="4"
-                        CornerRadius="8"
-                        Background="#0D1420"
-                        BorderBrush="#6D8B5CF6"
-                        BorderThickness="1">
+                <Border Margin="2" Padding="4" CornerRadius="8"
+                        Background="{DynamicResource KryptonMenuBrush}"
+                        BorderBrush="{DynamicResource KryptonBorderBrush}" BorderThickness="1">
                   <Border.Effect>
                     <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.55" Color="#000000" />
                   </Border.Effect>
@@ -167,8 +162,8 @@
                 <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
               </Trigger>
               <Trigger Property="IsHighlighted" Value="True">
-                <Setter TargetName="MenuRoot" Property="Background" Value="#2B1D4D" />
-                <Setter Property="Foreground" Value="#FFFFFF" />
+                <Setter TargetName="MenuRoot" Property="Background" Value="{DynamicResource KryptonMenuHoverBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource KryptonStrongTextBrush}" />
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter TargetName="MenuRoot" Property="Opacity" Value="0.42" />
@@ -182,7 +177,7 @@
     <Style TargetType="{x:Type Separator}">
       <Setter Property="Margin" Value="8,4" />
       <Setter Property="Height" Value="1" />
-      <Setter Property="Background" Value="#2B3950" />
+      <Setter Property="Background" Value="{DynamicResource KryptonBorderBrush}" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="{x:Type Separator}">
@@ -195,25 +190,23 @@
     <Style TargetType="{x:Type ComboBoxItem}">
       <Setter Property="MinHeight" Value="28" />
       <Setter Property="Padding" Value="9,5" />
-      <Setter Property="Background" Value="#0D1420" />
-      <Setter Property="Foreground" Value="#E8E2F5" />
+      <Setter Property="Background" Value="{DynamicResource KryptonMenuBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="{x:Type ComboBoxItem}">
-            <Border x:Name="ComboItemRoot"
-                    Padding="{TemplateBinding Padding}"
-                    Background="{TemplateBinding Background}">
+            <Border x:Name="ComboItemRoot" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
               <ContentPresenter />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsHighlighted" Value="True">
-                <Setter TargetName="ComboItemRoot" Property="Background" Value="#2B1D4D" />
-                <Setter Property="Foreground" Value="#FFFFFF" />
+                <Setter TargetName="ComboItemRoot" Property="Background" Value="{DynamicResource KryptonMenuHoverBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource KryptonStrongTextBrush}" />
               </Trigger>
               <Trigger Property="IsSelected" Value="True">
-                <Setter TargetName="ComboItemRoot" Property="Background" Value="#3B2568" />
-                <Setter Property="Foreground" Value="#FFFFFF" />
+                <Setter TargetName="ComboItemRoot" Property="Background" Value="{DynamicResource KryptonMenuSelectedBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource KryptonStrongTextBrush}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -223,9 +216,9 @@
 
     <Style TargetType="{x:Type ToolTip}">
       <Setter Property="Padding" Value="9,6" />
-      <Setter Property="Background" Value="#131C2B" />
-      <Setter Property="Foreground" Value="#E8E2F5" />
-      <Setter Property="BorderBrush" Value="#5E4296" />
+      <Setter Property="Background" Value="{DynamicResource KryptonMenuBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource KryptonTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KryptonBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="FontSize" Value="10" />
     </Style>
