@@ -768,11 +768,28 @@ func cfgVal(cfg, key, def) {
     if brk == 1 {
       let line = trim(substring(cfg, ls, i))
       let eq = indexOf(line, "=")
-      if eq > 0 { if trim(substring(line, 0, eq)) == key { emit trim(substring(line, eq + 1, len(line))) } }
+      if eq > 0 { if trim(substring(line, 0, eq)) == key {
+        let value = trim(substring(line, eq + 1, len(line)))
+        let hash = indexOf(value, "#")
+        // A leading # is a colour value; later # characters begin comments.
+        if hash > 0 { value = trim(substring(value, 0, hash)) }
+        emit value
+      } }
       ls = i + 1
     }
     i = i + 1
   }
+  emit def
+}
+func cfgAlias(cfg, primary, legacy, def) {
+  let v = cfgVal(cfg, primary, "")
+  if v != "" { emit v }
+  emit cfgVal(cfg, legacy, def)
+}
+func cfgBool(cfg, key, def) {
+  let v = toLower(cfgVal(cfg, key, ""))
+  if v == "true" || v == "yes" || v == "on" || v == "1" { emit 1 }
+  if v == "false" || v == "no" || v == "off" || v == "0" { emit 0 }
   emit def
 }
 func hexNib(c) { emit indexOf("0123456789abcdef", toLower(c)) }
@@ -780,6 +797,12 @@ func hexByte(s, i) { emit hexNib(substring(s, i, i + 1)) * 16 + hexNib(substring
 // config colour (#RRGGBB) or fallback RGB.
 func cfgRGB(cfg, key, r, g, b) {
   let v = cfgVal(cfg, key, "")
+  if indexOf(v, "#") == 0 { emit cocoaRGB(hexByte(v, 1), hexByte(v, 3), hexByte(v, 5)) }
+  emit cocoaRGB(r, g, b)
+}
+func cfgRGBAlias(cfg, primary, legacy, r, g, b) {
+  let v = cfgVal(cfg, primary, "")
+  if v == "" { v = cfgVal(cfg, legacy, "") }
   if indexOf(v, "#") == 0 { emit cocoaRGB(hexByte(v, 1), hexByte(v, 3), hexByte(v, 5)) }
   emit cocoaRGB(r, g, b)
 }
@@ -826,6 +849,12 @@ func appendRunTo(acc, text, fg, bg, font) {
   msg_4(acc, "addAttribute:value:range:", nsString("NSFont"), font, start, span)
   if bg != 0 { msg_4(acc, "addAttribute:value:range:", nsString("NSBackgroundColor"), bg, start, span) }
   emit "1"
+}
+func stemCursorGlyph() {
+  let style = msg(cocoaGetAssocKey(appH(), "stem.cursorstyle"), "UTF8String")
+  if style == "block" { emit "█" }
+  if style == "underline" { emit "▁" }
+  emit "▏"
 }
 
 // Parse a gridRender snapshot (text + ESC[..m) -> a coloured NSMutableAttributedString.
@@ -882,8 +911,9 @@ func renderSnapshot(snap, deflt, font, cr, cc) {
           if len(run) > 0 { appendRunTo(acc, run, fg, bg, font)  run = "" }
           // bar cursor only over a blank cell; over a real char (e.g. an
           // autosuggestion's first letter) keep the char so it stays visible.
-          if c == " " { appendRunTo(acc, "▏", fg, bg, font) }
-          else { appendRunTo(acc, c, fg, bg, font) }
+          // Always draw the configured cursor glyph. Keeping the underlying
+          // character made the cursor disappear over autosuggestions/text.
+          appendRunTo(acc, stemCursorGlyph(), cocoaGetAssocKey(appH(), "stem.cursorcolor"), bg, font)
           curStart = 0
         } else { run = run + c }
         if cont == 0 { vcol = vcol + 1 }
@@ -902,7 +932,7 @@ func renderSnapshot(snap, deflt, font, cr, cc) {
       let k = vcol
       while k < cc { pad = pad + " "  k = k + 1 }
       if len(pad) > 0 { appendRunTo(acc, pad, fg, bg, font) }
-      appendRunTo(acc, "▏", fg, bg, font)
+      appendRunTo(acc, stemCursorGlyph(), cocoaGetAssocKey(appH(), "stem.cursorcolor"), bg, font)
       }
     }
   }
@@ -928,13 +958,143 @@ func onStemZoomOut(self, cmd, sender)   { let s = cocoaNumberVal(cocoaGetAssocKe
 func onStemZoomReset(self, cmd, sender) { cocoaSetAssocKey(appH(), "stem.fontsize", cocoaNumber(13))  stemApplyFont() }
 func onStemFull(self, cmd, sender)      { msg_1(cocoaGetAssocKey(appH(), "stem.win"), "toggleFullScreen:", 0)  emit "1" }
 func onStemHelp(self, cmd, sender)      { exec("open https://krypton-lang.org/programs/stem.html")  emit "1" }
-func onStemConfig(self, cmd, sender)    { exec("open -t \"" + environ("HOME") + "/.config/stem/config\"")  emit "1" }
+// Replace or append one key while preserving comments and unknown/advanced keys.
+func cfgSet(cfg, key, value) {
+  let out = ""
+  let found = 0
+  let n = lineCount(cfg)
+  let i = 0
+  while i < n {
+    let line = getLine(cfg, i)
+    let clean = trim(line)
+    let eq = indexOf(clean, "=")
+    if eq > 0 && trim(substring(clean, 0, eq)) == key {
+      out = out + key + " = " + value + "\n"
+      found = 1
+    } else { out = out + line + "\n" }
+    i = i + 1
+  }
+  if found == 0 { out = out + key + " = " + value + "\n" }
+  emit out
+}
+func settingText(key) { emit cocoaGetText(cocoaGetAssocKey(appH(), "stem.setting." + key)) }
+func settingBool(key) {
+  if cocoaState(cocoaGetAssocKey(appH(), "stem.setting." + key)) == 1 { emit "true" }
+  emit "false"
+}
+func addSettingField(win, cfg, key, label, def, x, y, w) {
+  cocoaPlainLabel(win, label, x, y + 3, 150, 22)
+  let field = cocoaTextField(win, x + 155, y, w - 155, 26)
+  cocoaSetText(field, cfgVal(cfg, key, def))
+  cocoaSetAssocKey(appH(), "stem.setting." + key, field)
+  emit field
+}
+func addSettingCheck(win, cfg, key, label, def, x, y, w) {
+  let box = cocoaCheckbox(win, label, x, y, w, 24)
+  cocoaSetState(box, cfgBool(cfg, key, def))
+  cocoaSetAssocKey(appH(), "stem.setting." + key, box)
+  emit box
+}
+func stemGenerateConfig() {
+  let preview = cocoaGetAssocKey(appH(), "stem.settings.preview")
+  let cfg = cocoaTVGetString(preview)
+  cfg = cfgSet(cfg, "title", settingText("title"))
+  cfg = cfgSet(cfg, "shell", settingText("shell"))
+  cfg = cfgSet(cfg, "working_directory", settingText("working_directory"))
+  cfg = cfgSet(cfg, "term", settingText("term"))
+  cfg = cfgSet(cfg, "font_family", settingText("font_family"))
+  cfg = cfgSet(cfg, "font_size", settingText("font_size"))
+  cfg = cfgSet(cfg, "width", settingText("width"))
+  cfg = cfgSet(cfg, "height", settingText("height"))
+  cfg = cfgSet(cfg, "opacity", settingText("opacity"))
+  cfg = cfgSet(cfg, "padding", settingText("padding"))
+  cfg = cfgSet(cfg, "pane_gap", settingText("pane_gap"))
+  cfg = cfgSet(cfg, "appearance", settingText("appearance"))
+  cfg = cfgSet(cfg, "cursor_style", settingText("cursor_style"))
+  cfg = cfgSet(cfg, "cursor_color", settingText("cursor_color"))
+  cfg = cfgSet(cfg, "foreground", settingText("foreground"))
+  cfg = cfgSet(cfg, "background", settingText("background"))
+  cfg = cfgSet(cfg, "titlebar_transparent", settingBool("titlebar_transparent"))
+  cfg = cfgSet(cfg, "center_on_launch", settingBool("center_on_launch"))
+  cfg = cfgSet(cfg, "start_fullscreen", settingBool("start_fullscreen"))
+  cfg = cfgSet(cfg, "always_on_top", settingBool("always_on_top"))
+  cfg = cfgSet(cfg, "window_shadow", settingBool("window_shadow"))
+  cfg = cfgSet(cfg, "scrollbar", settingBool("scrollbar"))
+  cocoaTVSetString(preview, cfg)
+  emit cfg
+}
+func onStemSettingsGenerate(self, cmd, sender) { stemGenerateConfig()  emit "1" }
+func onStemSettingsSave(self, cmd, sender) {
+  let cfg = stemGenerateConfig()
+  writeFile(msg(cocoaGetAssocKey(appH(), "stem.cfgpath"), "UTF8String"), cfg)
+  onStemReload(0, 0, 0)
+  cocoaAlert("STEM Settings", "Configuration saved. Visual settings were applied; open a new window for shell and session changes.")
+  emit "1"
+}
+func onStemConfig(self, cmd, sender) {
+  let app = appH()
+  let existing = cocoaGetAssocKey(app, "stem.settingswin")
+  if existing != 0 { cocoaShow(existing, app)  emit "1" }
+  let cfg = readFile(msg(cocoaGetAssocKey(app, "stem.cfgpath"), "UTF8String"))
+  let win = cocoaWindow(app, "STEM Settings — GUI + generated stem.conf", 1040, 720)
+  cocoaSetWindowMinSize(win, 900, 620)
+  cocoaSetAssocKey(app, "stem.settingswin", win)
+  cocoaPlainLabel(win, "Common settings", 24, 676, 420, 26)
+  cocoaPlainLabel(win, "Generated config code (advanced settings remain editable)", 500, 676, 510, 26)
+  let y = 640
+  addSettingField(win, cfg, "title", "Window title", "STEM", 24, y, 440)
+  addSettingField(win, cfg, "shell", "Shell", "/bin/zsh", 24, y - 36, 440)
+  addSettingField(win, cfg, "working_directory", "Working directory", "~", 24, y - 72, 440)
+  addSettingField(win, cfg, "term", "TERM", "xterm-256color", 24, y - 108, 440)
+  addSettingField(win, cfg, "font_family", "Font family", cfgAlias(cfg, "font_family", "font", "MesloLGS Nerd Font"), 24, y - 144, 440)
+  addSettingField(win, cfg, "font_size", "Font size", "13", 24, y - 180, 440)
+  addSettingField(win, cfg, "width", "Window width", "1120", 24, y - 216, 440)
+  addSettingField(win, cfg, "height", "Window height", "740", 24, y - 252, 440)
+  addSettingField(win, cfg, "opacity", "Opacity (0.2–1.0)", "0.80", 24, y - 288, 440)
+  addSettingField(win, cfg, "padding", "Outer padding", "10", 24, y - 324, 440)
+  addSettingField(win, cfg, "pane_gap", "Pane gap", "2", 24, y - 360, 440)
+  addSettingField(win, cfg, "appearance", "Appearance", "dark", 24, y - 396, 440)
+  addSettingField(win, cfg, "cursor_style", "Cursor style", "bar", 24, y - 432, 440)
+  addSettingField(win, cfg, "cursor_color", "Cursor color", "#8B5CF6", 24, y - 468, 440)
+  addSettingField(win, cfg, "foreground", "Foreground", cfgAlias(cfg, "foreground", "fg", "#D8DAD4"), 24, y - 504, 440)
+  addSettingField(win, cfg, "background", "Background", cfgAlias(cfg, "background", "bg", "#05070C"), 24, y - 540, 440)
+  addSettingCheck(win, cfg, "titlebar_transparent", "Transparent titlebar", 1, 24, 62, 190)
+  addSettingCheck(win, cfg, "center_on_launch", "Center new windows", 1, 220, 62, 190)
+  addSettingCheck(win, cfg, "start_fullscreen", "Start fullscreen", 0, 24, 36, 190)
+  addSettingCheck(win, cfg, "always_on_top", "Always on top", 0, 220, 36, 190)
+  addSettingCheck(win, cfg, "window_shadow", "Window shadow", 1, 24, 10, 190)
+  addSettingCheck(win, cfg, "scrollbar", "Scrollbar", 1, 220, 10, 190)
+  let preview = cocoaScrollText(win, 500, 62, 516, 600)
+  cocoaTVSetString(preview, cfg)
+  cocoaTVNoWrap(preview)
+  cocoaSetFont(preview, cocoaMonoFont(11))
+  cocoaSetAssocKey(app, "stem.settings.preview", preview)
+  let gen = cocoaButton(win, "Generate Preview", 500, 18, 150, 32)
+  cocoaOnClickKeyed(gen, "stem_settings_generate", funcptr(onStemSettingsGenerate))
+  let save = cocoaButton(win, "Save & Apply", 860, 18, 156, 32)
+  cocoaOnClickKeyed(save, "stem_settings_save", funcptr(onStemSettingsSave))
+  cocoaShow(win, app)
+  emit "1"
+}
 func onStemReload(self, cmd, sender) {
-  let cfg = readFile(environ("HOME") + "/.config/stem/config")
+  let cfg = readFile(msg(cocoaGetAssocKey(appH(), "stem.cfgpath"), "UTF8String"))
   cocoaSetAssocKey(appH(), "stem.fontsize", cocoaNumber(toInt(cfgVal(cfg, "font_size", "13"))))
-  cocoaSetAssocKey(appH(), "stem.fontfam", nsString(cfgVal(cfg, "font", "JetBrainsMono Nerd Font Mono")))
+  cocoaSetAssocKey(appH(), "stem.fontfam", nsString(cfgAlias(cfg, "font_family", "font", "JetBrainsMono Nerd Font Mono")))
+  cocoaSetAssocKey(appH(), "stem.cursorstyle", nsString(cfgVal(cfg, "cursor_style", "bar")))
+  cocoaSetAssocKey(appH(), "stem.cursorcolor", cfgRGB(cfg, "cursor_color", 139, 92, 246))
   stemApplyFont()
-  msg_1(cocoaGetAssocKey(appH(), "stem.win"), "setTitle:", nsString(cfgVal(cfg, "title", "stem")))
+  let win = cocoaGetAssocKey(appH(), "stem.win")
+  let fg = cfgRGBAlias(cfg, "foreground", "fg", 216, 218, 212)
+  let bg = cfgRGBAlias(cfg, "background", "bg", 5, 7, 12)
+  cocoaSetAssocKey(appH(), "stem.fgc", fg)
+  cocoaSetAssocKey(appH(), "stem.bgc", bg)
+  msg_1(win, "setTitle:", nsString(cfgVal(cfg, "title", "STEM")))
+  msg_1(win, "setBackgroundColor:", bg)
+  msg_d1(win, "setAlphaValue:", cfgVal(cfg, "opacity", "0.80"))
+  let docs = cocoaGetAssocKey(appH(), "stem.pdocs")
+  let dn = cocoaArrayCount(docs)
+  let di = 0
+  while di < dn { cocoaSetBg(cocoaArrayGet(docs, di), bg)  cocoaSetTextColor(cocoaArrayGet(docs, di), fg)  di = di + 1 }
   emit "1"
 }
 func onStemAbout(self, cmd, sender) { exec("osascript -e 'display dialog \"stem " + fromCharCode(8212) + " a pure-Krypton terminal on the objk Objective-C FFI. No Obj-C source.\\n\\nkrypton-lang.org/programs/stem.html\" buttons {\"OK\"} default button \"OK\" with title \"About stem\"' >/dev/null 2>&1 &")  emit "1" }
@@ -1020,6 +1180,8 @@ func stemMakePaneView(m, x, y, w, h, pcols, prows) {
   let app = appH()
   let win = cocoaGetAssocKey(app, "stem.win")
   let view = cocoaScrollText(win, x, y, w, h)
+  msg_1(msg(view, "enclosingScrollView"), "setBorderType:", 0)
+  msg_1(msg(view, "enclosingScrollView"), "setHasVerticalScroller:", brainFlagS("stem.scrollbar", 1))
   msg_1(view, "setEditable:", 0)
   msg_1(view, "setSelectable:", 0)
   cocoaSetFont(view, cocoaGetAssocKey(app, "stem.mono"))
@@ -1068,8 +1230,17 @@ func splitA(n)   { emit cocoaArrayGet(n, 2) }
 func splitB(n)   { emit cocoaArrayGet(n, 3) }
 func layoutTree(n, x, y, w, h) {
   if nodeType(n) == 0 { setPane(leafIdx(n), x, y, w, h)  emit "1" }
-  if splitAxis(n) == 1 { layoutTree(splitA(n), x, y, w / 2, h)  layoutTree(splitB(n), x + w / 2, y, w / 2, h) }
-  else { layoutTree(splitA(n), x, y + h / 2, w, h / 2)  layoutTree(splitB(n), x, y, w, h / 2) }
+  let gap = brainFlagS("stem.panegap", 2)
+  if splitAxis(n) == 1 {
+    let half = (w - gap) / 2
+    layoutTree(splitA(n), x, y, half, h)
+    layoutTree(splitB(n), x + half + gap, y, w - half - gap, h)
+  }
+  else {
+    let half = (h - gap) / 2
+    layoutTree(splitA(n), x, y + half + gap, w, h - half - gap)
+    layoutTree(splitB(n), x, y, w, half)
+  }
   emit "1"
 }
 func splitTree(n, target, axis, newIdx, before) {
@@ -1115,7 +1286,8 @@ func retile(axis) {
   let app = appH()
   let W = cocoaNumberVal(cocoaGetAssocKey(app, "stem.w"))
   let H = cocoaNumberVal(cocoaGetAssocKey(app, "stem.h"))
-  layoutTree(cocoaGetAssocKey(app, "stem.tree"), 0, 0, W, H)
+  let pad = brainFlagS("stem.padding", 0)
+  layoutTree(cocoaGetAssocKey(app, "stem.tree"), pad, pad, W - pad * 2, H - pad * 2)
   let leaves = treeLeaves()
   let ln = cocoaArrayCount(leaves)
   let scrolls = cocoaGetAssocKey(app, "stem.pscrolls")
@@ -1185,13 +1357,24 @@ func onClosePane(self, cmd, sender) {
 }
 
 func defaultConfig() {
-  emit "# stem config — key = value, # comments. Restart stem to apply.\nshell = /bin/zsh\nfont = JetBrainsMono Nerd Font Mono\nfont_size = 13\ncols = 92\nrows = 28\nwidth = 760\nheight = 500\ntitle = stem\n# colours as #RRGGBB\nfg = #ffffff\nbg = #000000\ncolor0 = #000000\ncolor1 = #cd3131\ncolor2 = #0dbc79\ncolor3 = #e5e510\ncolor4 = #2472c8\ncolor5 = #bc3fbc\ncolor6 = #11a8cd\ncolor7 = #e5e5e5\ncolor8 = #666666\ncolor9 = #f14c4c\ncolor10 = #23d18b\ncolor11 = #f5f567\ncolor12 = #3b8eea\ncolor13 = #d670d6\ncolor14 = #29b8db\ncolor15 = #ffffff\n"
+  let resources = msg(msg(cls("NSBundle"), "mainBundle"), "resourcePath")
+  if resources != 0 {
+    let bundled = readFile(msg(resources, "UTF8String") + "/stem.conf")
+    if len(bundled) > 0 { emit bundled }
+  }
+  emit "# STEM configuration\ntitle = STEM\nshell = /bin/zsh\nworking_directory = ~\nterm = xterm-256color\nfont_family = JetBrainsMono Nerd Font Mono\nfont_size = 13\ncols = 100\nrows = 30\nwidth = 1000\nheight = 650\npadding = 8\npane_gap = 2\nopacity = 1.0\nappearance = dark\nscrollbar = true\ncursor_style = bar\ncursor_color = #8B5CF6\nforeground = #D8DAD4\nbackground = #05070C\n"
 }
 
 just run {
   // load config (create with defaults on first run)
-  let cfgPath = environ("HOME") + "/.config/stem/config"
+  let cfgPath = environ("STEM_CONF")
+  if cfgPath == "" { cfgPath = environ("HOME") + "/.config/stem/stem.conf" }
   let cfg = readFile(cfgPath)
+  // One-time compatibility with the original macOS path.
+  if len(cfg) == 0 {
+    let legacy = readFile(environ("HOME") + "/.config/stem/config")
+    if len(legacy) > 0 { cfg = legacy  writeFile(cfgPath, cfg) }
+  }
   if len(cfg) == 0 {
     exec("mkdir -p \"" + environ("HOME") + "/.config/stem\"")
     cfg = defaultConfig()
@@ -1203,6 +1386,10 @@ just run {
   let width = toInt(cfgVal(cfg, "width", "760"))
   let height = toInt(cfgVal(cfg, "height", "500"))
   let shell = cfgVal(cfg, "shell", "/bin/zsh")
+  if shell == "" { shell = "/bin/zsh" }
+  let termName = cfgVal(cfg, "term", "xterm-256color")
+  let cwd = cfgVal(cfg, "working_directory", "~")
+  if cwd == "~" { cwd = environ("HOME") }
 
   // Finder-launched apps inherit launchd's minimal env (no Homebrew PATH), so a
   // plain shell sources ~/.zshrc with `$(brew --prefix)` failing -> bare prompt.
@@ -1212,7 +1399,7 @@ just run {
   // p10k hangs forever waiting for it -> blank prompt. Disable gitstatus +
   // instant-prompt so p10k draws immediately (loses only the git segment).
   let wrapper = environ("HOME") + "/.config/stem/launch.zsh"
-  writeFile(wrapper, "#!" + shell + "\nexport TERM=xterm-256color\nexport TERM_PROGRAM=stem\nexport POWERLEVEL9K_DISABLE_GITSTATUS=true\nexport POWERLEVEL9K_INSTANT_PROMPT=off\nexec " + shell + " -l\n")
+  writeFile(wrapper, "#!" + shell + "\nexport TERM=" + termName + "\nexport TERM_PROGRAM=stem\nexport COLORTERM=truecolor\ncd \"" + cwd + "\" 2>/dev/null || cd \"$HOME\"\nexec " + shell + " -l\n")
   exec("/bin/chmod +x " + wrapper)
 
   // fork ALL 4 pane shells BEFORE cocoaInit + render them warm from frame 0
@@ -1224,6 +1411,7 @@ just run {
   let m3 = stemForkPty(cols, rows, wrapper)
 
   let app = cocoaInit()
+  cocoaSetAssocKey(app, "stem.cfgpath", nsString(cfgPath))
   let bar = cocoaMenuBar(app)
   // app menu (system bolds the first menu as the app name)
   let appMenu = cocoaMenuAdd(bar, "stem")
@@ -1299,16 +1487,22 @@ just run {
   }
   cocoaSetAssocKey(app, "stem.pal", pal)
 
-  let win = cocoaWindow(app, cfgVal(cfg, "title", "stem"), width, height)
+  let win = cocoaWindow(app, cfgVal(cfg, "title", "STEM"), width, height)
   cocoaSetAssocKey(app, "stem.win", win)
-  let mono = cocoaFontFamily(cocoaMonoFont(toInt(cfgVal(cfg, "font_size", "13"))), cfgVal(cfg, "font", "JetBrainsMono Nerd Font Mono"))
-  let fg = cfgRGB(cfg, "fg", 255, 255, 255)
-  let bg = cfgRGB(cfg, "bg", 0, 0, 0)
+  let fontFamily = cfgAlias(cfg, "font_family", "font", "JetBrainsMono Nerd Font Mono")
+  let mono = cocoaFontFamily(cocoaMonoFont(toInt(cfgVal(cfg, "font_size", "13"))), fontFamily)
+  let fg = cfgRGBAlias(cfg, "foreground", "fg", 216, 218, 212)
+  let bg = cfgRGBAlias(cfg, "background", "bg", 5, 7, 12)
   cocoaSetAssocKey(app, "stem.mono", mono)
   cocoaSetAssocKey(app, "stem.fontsize", cocoaNumber(toInt(cfgVal(cfg, "font_size", "13"))))
-  cocoaSetAssocKey(app, "stem.fontfam", nsString(cfgVal(cfg, "font", "JetBrainsMono Nerd Font Mono")))
+  cocoaSetAssocKey(app, "stem.fontfam", nsString(fontFamily))
   cocoaSetAssocKey(app, "stem.fgc", fg)
   cocoaSetAssocKey(app, "stem.bgc", bg)
+  cocoaSetAssocKey(app, "stem.cursorstyle", nsString(cfgVal(cfg, "cursor_style", "bar")))
+  cocoaSetAssocKey(app, "stem.cursorcolor", cfgRGB(cfg, "cursor_color", 139, 92, 246))
+  cocoaSetAssocKey(app, "stem.padding", cocoaNumber(toInt(cfgVal(cfg, "padding", "8"))))
+  cocoaSetAssocKey(app, "stem.panegap", cocoaNumber(toInt(cfgVal(cfg, "pane_gap", "2"))))
+  cocoaSetAssocKey(app, "stem.scrollbar", cocoaNumber(cfgBool(cfg, "scrollbar", 1)))
   cocoaSetAssocKey(app, "stem.w", cocoaNumber(width))
   cocoaSetAssocKey(app, "stem.h", cocoaNumber(height))
   cocoaSetAssocKey(app, "stem.cols", cocoaNumber(cols))
@@ -1316,8 +1510,15 @@ just run {
   cocoaSetAssocKey(app, "stem.shell", nsString(shell))
   cocoaSetAssocKey(app, "stem.tree", mkLeaf(0))
   msg_1(win, "setBackgroundColor:", bg)
-  msg_1(win, "setTitlebarAppearsTransparent:", 1)
-  msg_1(win, "setAppearance:", msg_1(cls("NSAppearance"), "appearanceNamed:", nsString("NSAppearanceNameDarkAqua")))
+  msg_d1(win, "setAlphaValue:", cfgVal(cfg, "opacity", "0.80"))
+  cocoaSetWindowMinSize(win, toInt(cfgVal(cfg, "minimum_width", "480")), toInt(cfgVal(cfg, "minimum_height", "280")))
+  msg_1(win, "setTitlebarAppearsTransparent:", cfgBool(cfg, "titlebar_transparent", 1))
+  msg_1(win, "setHasShadow:", cfgBool(cfg, "window_shadow", 1))
+  if cfgBool(cfg, "always_on_top", 0) == 1 { msg_1(win, "setLevel:", 3) }
+  if cfgBool(cfg, "center_on_launch", 1) == 1 { msg(win, "center") }
+  let appearance = toLower(cfgVal(cfg, "appearance", "dark"))
+  if appearance == "dark" { msg_1(win, "setAppearance:", msg_1(cls("NSAppearance"), "appearanceNamed:", nsString("NSAppearanceNameDarkAqua"))) }
+  if appearance == "light" { msg_1(win, "setAppearance:", msg_1(cls("NSAppearance"), "appearanceNamed:", nsString("NSAppearanceNameAqua"))) }
   cocoaSetAssocKey(app, "stem.pmasters", cocoaArray())
   cocoaSetAssocKey(app, "stem.pscrolls", cocoaArray())
   cocoaSetAssocKey(app, "stem.pviews", cocoaArray())
@@ -1326,10 +1527,11 @@ just run {
   cocoaSetAssocKey(app, "stem.prows", cocoaArray())
   cocoaSetAssocKey(app, "stem.pkviews", cocoaArray())
   // all 4 panes created + warm; only pane 0 shown until split
-  let kview = stemMakePaneView(m0, 0, 0, width, height, cols, rows)
-  let kv1 = stemMakePaneView(m1, 0, 0, width, height, cols, rows)
-  let kv2 = stemMakePaneView(m2, 0, 0, width, height, cols, rows)
-  let kv3 = stemMakePaneView(m3, 0, 0, width, height, cols, rows)
+  let pad = toInt(cfgVal(cfg, "padding", "8"))
+  let kview = stemMakePaneView(m0, pad, pad, width - pad * 2, height - pad * 2, cols, rows)
+  let kv1 = stemMakePaneView(m1, pad, pad, width - pad * 2, height - pad * 2, cols, rows)
+  let kv2 = stemMakePaneView(m2, pad, pad, width - pad * 2, height - pad * 2, cols, rows)
+  let kv3 = stemMakePaneView(m3, pad, pad, width - pad * 2, height - pad * 2, cols, rows)
   let pscrolls = cocoaGetAssocKey(app, "stem.pscrolls")
   let pkviews = cocoaGetAssocKey(app, "stem.pkviews")
   let hi = 1
@@ -1341,6 +1543,7 @@ just run {
   cocoaSetAssocKey(app, "stem.master", cocoaNumber(m0))
   cocoaSetAssocKey(app, "stem.focus", kview)
   cocoaShow(win, app)
+  if cfgBool(cfg, "start_fullscreen", 0) == 1 { msg_1(win, "toggleFullScreen:", 0) }
   cocoaMakeFirstResponder(win, kview)
   cocoaFinishLaunching(app)
   // make the app frontmost/key on launch — a manual-event-loop app isn't

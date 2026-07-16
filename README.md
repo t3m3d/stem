@@ -39,7 +39,7 @@ The cask app is ad-hoc signed (not notarized) — first launch, right-click → 
 
 Self-contained — no krypton runtime dependency. A
 [JetBrainsMono Nerd Font](https://www.nerdfonts.com/) is recommended for the
-powerline/icon glyphs (configurable in `~/.config/stem/config`).
+powerline/icon glyphs (configurable in `~/.config/stem/stem.conf`).
 
 ## Build from source
 
@@ -127,25 +127,46 @@ point `KRYPTON_ROOT` at a krypton 2.4.0 install. It prints the sha256 + the
 
 ## Config
 
-`~/.config/stem/config` (auto-created, hot-reloads on window focus):
+`~/.config/stem/stem.conf` is the shared Windows/macOS/Linux configuration.
+Set `STEM_CONF` to an absolute path to use another file. Stem creates the file
+from its bundled, fully commented template on first launch; the macOS **Reload
+Configuration** menu applies fonts, core colors, cursor styling, title, and
+opacity without restarting. Shell, working-directory, grid, and layout changes
+apply to new windows.
 
 ```ini
-titlebar_light   = #2b2b2b      # dark grey in light mode, …
-titlebar_dark    = #000000      # … black in dark mode (follows system appearance)
-background_light = #2b2b2b
-background_dark  = #000000
-cursor_blink_ms  = 530          # 0 = steady
-cursor_color     = #d8dad4
-cursor_style     = bar          # bar | block | underline
-font_family      = JetBrainsMono Nerd Font Mono
-font_size        = 13
-opacity          = 1.0          # 0.2–1.0, translucent bg (text stays opaque)
-padding          = 6
-line_spacing     = 0            # extra px between rows
-bell             = visual       # visual | audible | off
-copy_on_select   = false        # auto-copy selection; middle-click pastes
-scrollback_lines = 2000
+title = STEM - Krypton Terminal
+shell = /bin/zsh
+working_directory = ~
+term = xterm-256color
+
+width = 1120
+height = 740
+minimum_width = 480
+minimum_height = 280
+appearance = dark              # auto | dark | light
+titlebar_transparent = true
+center_on_launch = true
+start_fullscreen = false
+always_on_top = false
+window_shadow = true
+opacity = 0.80
+
+font_family = MesloLGS Nerd Font
+font_size = 13.5
+padding = 10
+pane_gap = 2
+scrollbar = true
+
+cursor_style = bar             # bar | block | underline
+cursor_color = #8B5CF6
+foreground = #D8DAD4
+background = #05070C
 ```
+
+The repository's [`stem.conf`](stem.conf) is the canonical reference containing
+every shared key, compatibility alias, interaction setting, and complete ANSI
+palette. Frontends safely ignore keys that are not implemented on that platform.
 
 `⌘A` selects all · `⌘-click` opens underlined URLs · ⇧PageUp/Down also scrolls.
 
