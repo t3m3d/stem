@@ -1,0 +1,527 @@
+<Window x:Class="Stem.Windows.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Stem.Windows"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="STEM — Krypton Terminal"
+        Width="1120"
+        Height="740"
+        MinWidth="620"
+        MinHeight="400"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        Background="#070A12"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        StateChanged="OnWindowStateChanged">
+  <shell:WindowChrome.WindowChrome>
+    <shell:WindowChrome CaptionHeight="52"
+                        ResizeBorderThickness="7"
+                        CornerRadius="12"
+                        GlassFrameThickness="0"
+                        UseAeroCaptionButtons="False" />
+  </shell:WindowChrome.WindowChrome>
+
+  <Border x:Name="RootFrame"
+          Margin="1"
+          CornerRadius="12"
+          BorderThickness="1"
+          Background="#070A12">
+    <Border.BorderBrush>
+      <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#4C8B5CF6" Offset="0" />
+        <GradientStop Color="#208B5CF6" Offset="0.5" />
+        <GradientStop Color="#3C2A354A" Offset="1" />
+      </LinearGradientBrush>
+    </Border.BorderBrush>
+
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="52" />
+        <RowDefinition Height="*" />
+        <RowDefinition Height="36" />
+      </Grid.RowDefinitions>
+
+      <Border Grid.Row="0"
+              CornerRadius="11,11,0,0"
+              MouseLeftButtonDown="OnTitleBarMouseLeftButtonDown">
+        <Border.Background>
+          <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#111829" Offset="0" />
+            <GradientStop Color="#0C111C" Offset="0.55" />
+            <GradientStop Color="#090D16" Offset="1" />
+          </LinearGradientBrush>
+        </Border.Background>
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+
+          <StackPanel Grid.Column="0"
+                      Orientation="Horizontal"
+                      VerticalAlignment="Center"
+                      Margin="14,0,0,0">
+            <Border Width="30"
+                    Height="30"
+                    CornerRadius="8"
+                    BorderThickness="1">
+              <Border.BorderBrush>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                  <GradientStop Color="#8B5CF6" Offset="0" />
+                  <GradientStop Color="#C4A7FF" Offset="1" />
+                </LinearGradientBrush>
+              </Border.BorderBrush>
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                  <GradientStop Color="#2B1D4D" Offset="0" />
+                  <GradientStop Color="#1D1533" Offset="1" />
+                </LinearGradientBrush>
+              </Border.Background>
+              <TextBlock Text="K"
+                         FontFamily="Cascadia Mono, Consolas"
+                         FontSize="15"
+                         FontWeight="Bold"
+                         Foreground="#F4F7FF"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+              <TextBlock Text="STEM"
+                         FontSize="14"
+                         FontWeight="SemiBold"
+                         Foreground="#F0F3F8" />
+              <TextBlock Text="KRYPTON TERMINAL"
+                         Margin="0,1,0,0"
+                         FontSize="8.5"
+                         FontWeight="SemiBold"
+                         Foreground="#768398" />
+            </StackPanel>
+          </StackPanel>
+
+          <Border Grid.Column="1"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Padding="12,5"
+                  CornerRadius="12"
+                  BorderBrush="#273248"
+                  BorderThickness="1"
+                  Background="#88080C14">
+            <StackPanel Orientation="Horizontal">
+              <Ellipse Width="6"
+                       Height="6"
+                       Margin="0,0,7,0"
+                       VerticalAlignment="Center"
+                       Fill="#8B5CF6" />
+              <TextBlock x:Name="WindowSessionTitle"
+                         Text="PowerShell"
+                         MaxWidth="420"
+                         TextTrimming="CharacterEllipsis"
+                         FontSize="11"
+                         Foreground="#AEB8C8" />
+            </StackPanel>
+          </Border>
+
+          <StackPanel Grid.Column="2"
+                      Orientation="Horizontal"
+                      shell:WindowChrome.IsHitTestVisibleInChrome="True">
+            <Button Style="{StaticResource ChromeButtonStyle}"
+                    Content="&#xE921;"
+                    ToolTip="Minimize"
+                    Click="OnMinimizeClick" />
+            <Button x:Name="MaximizeButton"
+                    Style="{StaticResource ChromeButtonStyle}"
+                    Content="&#xE922;"
+                    ToolTip="Maximize"
+                    Click="OnMaximizeClick" />
+            <Button Style="{StaticResource CloseButtonStyle}"
+                    Content="&#xE8BB;"
+                    ToolTip="Close"
+                    Click="OnCloseClick" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" Margin="12,7,12,7">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition x:Name="WorkspaceColumn" Width="224" />
+          <ColumnDefinition x:Name="WorkspaceGapColumn" Width="8" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border x:Name="WorkspaceDeck"
+                Grid.Column="0"
+                CornerRadius="10"
+                BorderBrush="#4C8B5CF6"
+                BorderThickness="1"
+                Background="#0A0F19">
+          <Border.Resources>
+            <Style x:Key="WorkspaceActionStyle" TargetType="Button">
+              <Setter Property="Height" Value="28" />
+              <Setter Property="Margin" Value="0,4,0,0" />
+              <Setter Property="Padding" Value="8,0" />
+              <Setter Property="BorderBrush" Value="#35455F" />
+              <Setter Property="BorderThickness" Value="1" />
+              <Setter Property="Background" Value="#101827" />
+              <Setter Property="Foreground" Value="#AEB8C8" />
+              <Setter Property="FontSize" Value="9" />
+              <Setter Property="FontWeight" Value="SemiBold" />
+              <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            </Style>
+          </Border.Resources>
+          <Grid Margin="10">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="KRYPTON WORKSPACE"
+                           FontSize="10"
+                           FontWeight="Bold"
+                           Foreground="#C4A7FF" />
+                <TextBlock x:Name="WorkspaceSummary"
+                           Margin="0,3,0,0"
+                           Text="1 TAB  /  1 PANE"
+                           FontSize="8"
+                           Foreground="#68758A" />
+              </StackPanel>
+              <Button Grid.Column="1"
+                      Width="24"
+                      Height="24"
+                      Padding="0"
+                      Content="‹"
+                      ToolTip="Collapse workspace deck (Ctrl+B)"
+                      BorderBrush="#35455F"
+                      BorderThickness="1"
+                      Background="#101827"
+                      Foreground="#C4A7FF"
+                      FocusVisualStyle="{x:Null}"
+                      Click="OnToggleWorkspaceClick" />
+            </Grid>
+
+            <ScrollViewer Grid.Row="1"
+                          Margin="0,10,0,8"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+              <StackPanel x:Name="WorkspacePaneList" />
+            </ScrollViewer>
+
+            <StackPanel Grid.Row="2">
+              <Button Style="{StaticResource WorkspaceActionStyle}"
+                      Content="+  NEW TAB"
+                      Click="OnNewTabClick" />
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="6" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Style="{StaticResource WorkspaceActionStyle}"
+                        Content="↔  SPLIT"
+                        Click="OnSplitRightClick" />
+                <Button Grid.Column="2"
+                        Style="{StaticResource WorkspaceActionStyle}"
+                        Content="↕  SPLIT"
+                        Click="OnSplitDownClick" />
+              </Grid>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="6" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Style="{StaticResource WorkspaceActionStyle}"
+                        Content="□  ZOOM"
+                        Click="OnTogglePaneZoomClick" />
+                <Button Grid.Column="2"
+                        Style="{StaticResource WorkspaceActionStyle}"
+                        Content="⌕  FIND"
+                        Click="OnFindClick" />
+              </Grid>
+              <Button Style="{StaticResource WorkspaceActionStyle}"
+                      Content="⚙  OPEN STEM.CONF"
+                      Click="OnOpenConfigClick" />
+              <TextBlock Margin="0,8,0,0"
+                         Text="LIVE SESSION CONTROL PLANE"
+                         HorizontalAlignment="Center"
+                         FontSize="7.5"
+                         Foreground="#4F5C70" />
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Border Grid.Column="2"
+                CornerRadius="10"
+                BorderThickness="1"
+                Background="#05070C">
+          <Border.BorderBrush>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+              <GradientStop Color="#6D8B5CF6" Offset="0" />
+              <GradientStop Color="#3240546B" Offset="0.42" />
+              <GradientStop Color="#6D8B5CF6" Offset="1" />
+            </LinearGradientBrush>
+          </Border.BorderBrush>
+          <Grid Margin="1">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="30" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    CornerRadius="8,8,0,0"
+                    BorderBrush="#1F2A3B"
+                    BorderThickness="0,0,0,1"
+                    Background="#0C121E">
+              <Grid Margin="11,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                  <Border Padding="8,3"
+                          CornerRadius="9"
+                          BorderBrush="#5E4296"
+                          BorderThickness="1"
+                          Background="#1D1533">
+                    <TextBlock x:Name="ShellBadge"
+                               Text="POWERSHELL"
+                               FontSize="8.5"
+                               FontWeight="Bold"
+                               Foreground="#C4A7FF" />
+                  </Border>
+                  <TextBlock Text="  /  LOCAL SESSION"
+                             VerticalAlignment="Center"
+                             FontSize="8.5"
+                             Foreground="#606C7E" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Margin="14,0"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                  <StackPanel x:Name="TabStrip"
+                              Orientation="Horizontal"
+                              VerticalAlignment="Center" />
+                  <Button x:Name="NewTabButton"
+                          Width="28"
+                          Height="24"
+                          Margin="5,0,0,0"
+                          Padding="0"
+                          Content="+"
+                          ToolTip="New PowerShell tab (Ctrl+Shift+T)"
+                          BorderBrush="#4C8B5CF6"
+                          BorderThickness="1"
+                          Background="#1D1533"
+                          Foreground="#C4A7FF"
+                          FontSize="15"
+                          FontWeight="SemiBold"
+                          FocusVisualStyle="{x:Null}"
+                          Click="OnNewTabClick" />
+                  <Button Width="28"
+                          Height="24"
+                          Margin="5,0,0,0"
+                          Padding="0"
+                          Content="↔"
+                          ToolTip="Split right (Alt+Shift++)"
+                          BorderBrush="#33415A"
+                          BorderThickness="1"
+                          Background="#101827"
+                          Foreground="#C4A7FF"
+                          FontSize="12"
+                          FocusVisualStyle="{x:Null}"
+                          Click="OnSplitRightClick" />
+                  <Button Width="28"
+                          Height="24"
+                          Margin="5,0,0,0"
+                          Padding="0"
+                          Content="↕"
+                          ToolTip="Split down (Alt+Shift+-)"
+                          BorderBrush="#33415A"
+                          BorderThickness="1"
+                          Background="#101827"
+                          Foreground="#C4A7FF"
+                          FontSize="12"
+                          FocusVisualStyle="{x:Null}"
+                          Click="OnSplitDownClick" />
+                  <Button Width="28"
+                          Height="24"
+                          Margin="5,0,0,0"
+                          Padding="0"
+                          Content="×"
+                          ToolTip="Close active pane (Ctrl+Shift+W)"
+                          BorderBrush="#33415A"
+                          BorderThickness="1"
+                          Background="#101827"
+                          Foreground="#AEB8C8"
+                          FontSize="12"
+                          FocusVisualStyle="{x:Null}"
+                          Click="OnClosePaneClick" />
+                  <Button Width="28"
+                          Height="24"
+                          Margin="5,0,0,0"
+                          Padding="0"
+                          Content="⌕"
+                          ToolTip="Find in terminal (Ctrl+Shift+F)"
+                          BorderBrush="#33415A"
+                          BorderThickness="1"
+                          Background="#101827"
+                          Foreground="#AEB8C8"
+                          FontSize="13"
+                          FocusVisualStyle="{x:Null}"
+                          Click="OnFindClick" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                  <Ellipse x:Name="ConnectionDot"
+                           Width="6"
+                           Height="6"
+                           Margin="0,0,7,0"
+                           Fill="#E4B856" />
+                  <TextBlock x:Name="ConnectionStatus"
+                             Text="STARTING"
+                             FontSize="8.5"
+                             FontWeight="SemiBold"
+                             Foreground="#8D98A9" />
+                </StackPanel>
+              </Grid>
+            </Border>
+
+            <Border Grid.Row="1"
+                    Margin="5"
+                    CornerRadius="5"
+                    BorderBrush="#152033"
+                    BorderThickness="1"
+                    Background="#05070C"
+                    ClipToBounds="True">
+              <Grid>
+                <ContentControl x:Name="TerminalHost"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                Background="#05070C" />
+
+                <Border x:Name="SearchPanel"
+                        Width="390"
+                        Margin="0,8,12,0"
+                        Padding="8,6"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Panel.ZIndex="10"
+                        Visibility="Collapsed"
+                        CornerRadius="7"
+                        BorderBrush="#6D8B5CF6"
+                        BorderThickness="1"
+                        Background="#F20C111C">
+                  <Border.Resources>
+                    <Style TargetType="Button">
+                      <Setter Property="Width" Value="28" />
+                      <Setter Property="Height" Value="26" />
+                      <Setter Property="Margin" Value="3,0,0,0" />
+                      <Setter Property="Padding" Value="0" />
+                      <Setter Property="BorderThickness" Value="0" />
+                      <Setter Property="Background" Value="#182235" />
+                      <Setter Property="Foreground" Value="#C4A7FF" />
+                      <Setter Property="FontSize" Value="12" />
+                      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                    </Style>
+                  </Border.Resources>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="56" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="SearchBox"
+                             Height="26"
+                             Padding="7,3"
+                             VerticalContentAlignment="Center"
+                             BorderBrush="#3B4A62"
+                             BorderThickness="1"
+                             Background="#05070C"
+                             Foreground="#F0F3F8"
+                             CaretBrush="#8B5CF6"
+                             FontFamily="Cascadia Mono, Consolas"
+                             FontSize="11"
+                             TextChanged="OnSearchTextChanged"
+                             PreviewKeyDown="OnSearchBoxPreviewKeyDown" />
+                    <TextBlock x:Name="SearchCount"
+                               Grid.Column="1"
+                               Text="0 / 0"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontSize="9"
+                               Foreground="#7F8A9D" />
+                    <Button Grid.Column="2"
+                            Content="↑"
+                            ToolTip="Previous match (Shift+Enter)"
+                            Click="OnSearchPreviousClick" />
+                    <Button Grid.Column="3"
+                            Content="↓"
+                            ToolTip="Next match (Enter)"
+                            Click="OnSearchNextClick" />
+                    <Button Grid.Column="4"
+                            Content="×"
+                            ToolTip="Close find (Esc)"
+                            Click="OnSearchCloseClick" />
+                  </Grid>
+                </Border>
+              </Grid>
+            </Border>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <Border Grid.Row="2"
+              BorderBrush="#182235"
+              BorderThickness="0,1,0,0"
+              Background="#090E17"
+              CornerRadius="0,0,11,11">
+        <Grid Margin="14,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="◆"
+                       Margin="0,0,7,0"
+                       FontSize="8"
+                       Foreground="#8B5CF6" />
+            <TextBlock Text="KRYPTON THEME"
+                       FontSize="8.5"
+                       FontWeight="SemiBold"
+                       Foreground="#7F8A9D" />
+          </StackPanel>
+          <TextBlock x:Name="ScrollbackStatus"
+                     Grid.Column="1"
+                     Text="LIVE"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center"
+                     FontSize="8"
+                     Foreground="#3F4B5E" />
+          <TextBlock x:Name="TerminalDimensions"
+                     Grid.Column="2"
+                     Text="120 × 40"
+                     VerticalAlignment="Center"
+                     FontFamily="Cascadia Mono, Consolas"
+                     FontSize="9"
+                     Foreground="#758196" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

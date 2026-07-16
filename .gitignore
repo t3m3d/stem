@@ -21,3 +21,6 @@ dist/
 kryoterm
 kryoterm-gui
 kryoterm.app/
+# Windows .NET preview build outputs
+**/bin/
+**/obj/

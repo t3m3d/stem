@@ -1,27 +1,29 @@
-# stem — Krypton-native terminal
+# stem — Krypton-first cross-platform terminal
 
-A terminal emulator that is **pure Krypton** — no C, no C++, no Qt/GTK, **no
-Obj-C source**. The shell, the pseudo-terminal, the ANSI/grid renderer, AND the
-macOS window/drawing/keyboard are all native Krypton: the engine on the macho
-backend `svc` syscall builtins (`term.k`), and the Cocoa GUI on the **objk**
-Objective-C FFI (`stdlib/cocoa.k` — `NSWindow`, custom `NSView` `drawRect:`,
-`keyDown:` → pty, `NSTimer` pump). The shipped app links only `libobjc` +
-`Foundation` + `AppKit` — verify: `otool -L`.
+STEM is a cross-platform terminal emulator built around Krypton. The canonical
+terminal engine and the macOS and Linux window paths remain pure Krypton. The
+Windows desktop preview is deliberately isolated under `windows/`: it uses a
+small .NET/WPF + ConPTY bridge while Objective-K's Windows backend catches up,
+and is designed to move back into Krypton without disturbing the other
+platforms.
 
-**Status: working macOS terminal.** Live `/bin/zsh` (sources your `~/.zshrc` —
-powerlevel10k, history, aliases), full colour incl. truecolor, scrollback,
-selection/copy, find, resize reflow, configurable theme/font/cursor. Runs full
-TUIs — **mouse reporting** (X10/SGR-1006, wheel scrolls in alt-screen),
-**alternate screen** (1049/1047/47), **cursor show/hide** (DECSET 25) +
-**shape** (DECSCUSR), **bracketed paste** (2004) and **focus reporting** (1004) —
-so vim, htop, less, tmux work. **Multi-pane**: splits (⌘D / File menu), native
-macOS tabs (⌘T), multiple windows (⌘N) — each pane its own shell. Typing `exit`
-(or any shell EOF) closes that pane; the bridge reaps the shell via the native
-`waitChild` builtin and shuts down.
+## Platform status
 
-```
- keyboard ─▶ stem.ks keyDown: ─(pty)▶ /bin/zsh
- window   ◀─ stem.ks drawRect: ◀───── term.k grid ◀── pty  (all pure Krypton / objk)
+- **macOS:** working pure-Krypton Cocoa terminal with live zsh, truecolor,
+  scrollback, selection, tabs, splits, mouse reporting, and full-screen TUIs.
+- **Linux:** pure-Krypton Wayland/Hyprland frontend in `stem_wl.ks`, backed by
+  the shared `term.k` grid and native PTY builtins.
+- **Windows:** interactive ConPTY preview with a Krypton-themed desktop frame,
+  PowerShell-first shell selection, VT/truecolor rendering, resize, keyboard
+  input, and bracketed paste. The managed bridge is temporary and Windows-only.
+
+```text
+                         term.k — canonical Krypton terminal engine
+                                      |
+             +------------------------+------------------------+
+             |                        |                        |
+       stem.ks (macOS)          stem_wl.ks (Linux)       windows/ (Windows)
+       Cocoa / Objective-K      Wayland / Krypton        WPF + ConPTY bridge
 ```
 
 ## Install (macOS, Apple Silicon)
@@ -41,25 +43,39 @@ powerline/icon glyphs (configurable in `~/.config/stem/config`).
 
 ## Build from source
 
+### macOS
+
 The build scripts are KryptScript (`.ks`, run with `kcc -r`), not shell.
 
 ```bash
-kcc -r build_objk.ks   # → dist/stem.app (pure Krypton, no Obj-C source)
+kcc -r build_objk.ks   # -> dist/stem.app (pure Krypton, no Obj-C source)
 open dist/stem.app
 ```
 
-`build_objk.ks` compiles `stem.ks` (window + custom `NSView` `drawRect:` grid +
-`keyDown:` → pty + `NSTimer` pump) straight to a `.app` on the objk FFI; the
-result links only `libobjc`/`Foundation`/`AppKit` (`otool -L` to confirm). Build
-the CLI engine alone with `kcc -r build.ks` (run.ks → `./stem`); the icon with
-`kcc -r make_icon.ks`. Linux/Windows: `build_linux.ks` / `build_windows.ks`.
+`build_objk.ks` compiles `stem.ks` straight to a Cocoa app through the
+Objective-K FFI. The result links only `libobjc`, Foundation, and AppKit.
 
-objk shipped in **Krypton 2.4.0**, so a released `kcc` builds it — no dev
-checkout needed. (`build_objk.ks` honors `KRYPTON_ROOT` for a dev tree if you
-have one; otherwise it uses the installed toolchain.)
+### Linux
 
-macOS + Apple Silicon. A [JetBrainsMono Nerd Font](https://www.nerdfonts.com/)
-is recommended so powerline/icon glyphs render (configurable).
+```bash
+kcc -r stem_wl.ks      # Wayland/Hyprland windowed frontend
+kcc -r build_linux.ks  # static CLI terminal engine
+```
+
+### Windows
+
+The usable desktop preview requires Windows 10 version 1809 or newer and the
+.NET 8 SDK:
+
+```powershell
+.\windows\build.ps1 -Test
+dotnet run --project .\windows\Stem.Windows\Stem.Windows.csproj
+```
+
+The older `kcc -r build_windows.ks` path remains the pure-Krypton Win32
+prototype. It is preserved for Objective-K/backend work; the isolated preview
+under `windows/` supplies the persistent ConPTY terminal in the meantime.
+See `windows/README.md` for the migration boundary and shell override.
 
 ## Shipping (cask DMG)
 
@@ -135,12 +151,11 @@ scrollback_lines = 2000
 
 ## Why this exists
 
-Krypton's whole point is escaping the C/C++/Qt stack — static, syscall-only
-binaries with zero non-Krypton runtime deps. stem proves a *terminal* can be
-built that way: the engine already is. The only non-Krypton code is the macOS
-window shim, kept deliberately small and marked for deletion once AppKit FFI
-lands in the backend. (A Linux window path — `stdlib/x11.k`/Wayland — is the
-other route to closing that gap.)
+Krypton's goal is to escape the C/C++/Qt runtime stack with compact native
+programs. STEM demonstrates that with a portable Krypton terminal engine and
+pure-Krypton macOS and Linux frontends. Windows currently keeps its temporary
+ConPTY/WPF bridge behind a strict platform boundary so the application is useful
+today and can be converted to Objective-K as Windows support matures.
 
 ## License
 
