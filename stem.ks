@@ -847,19 +847,21 @@ func appendRunTo(acc, text, fg, bg, font) {
   let span = msg(acc, "length") - start
   msg_4(acc, "addAttribute:value:range:", nsString("NSColor"), fg, start, span)
   msg_4(acc, "addAttribute:value:range:", nsString("NSFont"), font, start, span)
+  let shadow = cocoaGetAssocKey(appH(), "stem.textshadow")
+  if shadow != 0 { msg_4(acc, "addAttribute:value:range:", nsString("NSShadow"), shadow, start, span) }
   if bg != 0 { msg_4(acc, "addAttribute:value:range:", nsString("NSBackgroundColor"), bg, start, span) }
   emit "1"
 }
 func stemCursorGlyph() {
   let style = msg(cocoaGetAssocKey(appH(), "stem.cursorstyle"), "UTF8String")
   if style == "block" { emit "█" }
-  if style == "underline" { emit "▁" }
+  if style == "underline" { emit "▂" }
   emit "▏"
 }
 
 // Parse a gridRender snapshot (text + ESC[..m) -> a coloured NSMutableAttributedString.
 // Tracks fg (NSColor) + bg (NSBackgroundColor, 0 = none) so powerline segments fill.
-func renderSnapshot(snap, deflt, font, cr, cc) {
+func renderSnapshot(snap, deflt, font, cr, cc, cursorOn) {
   let acc = msg(msg(cls("NSMutableAttributedString"), "alloc"), "init")
   let esc = fromCharCode(27)
   let nl = fromCharCode(10)
@@ -900,14 +902,29 @@ func renderSnapshot(snap, deflt, font, cr, cc) {
         }
       }
     } else {
-      if c == nl { run = run + c  vrow = vrow + 1  vcol = 0  i = i + 1 }
+      if c == nl {
+        // _renderRow trims trailing blank cells. When the cursor is in the
+        // first trimmed cell after a prompt, restore that cell before moving
+        // to the next rendered row; waiting until the end only works when the
+        // cursor happens to be on the terminal's final physical row.
+        if cursorOn == 1 { if curStart < 0 { if vrow == cr { if cc >= vcol {
+          if len(run) > 0 { appendRunTo(acc, run, fg, bg, font)  run = "" }
+          let pad = ""
+          let k = vcol
+          while k < cc { pad = pad + " "  k = k + 1 }
+          if len(pad) > 0 { appendRunTo(acc, pad, fg, bg, font) }
+          appendRunTo(acc, stemCursorGlyph(), cocoaGetAssocKey(appH(), "stem.cursorcolor"), bg, font)
+          curStart = 0
+        } } } }
+        run = run + c  vrow = vrow + 1  vcol = 0  i = i + 1
+      }
       else {
         let cont = 0
         let code = charCode(c)
         if code >= 128 { if code < 192 { cont = 1 } }
         let isCur = 0
         if cont == 0 { if vrow == cr { if vcol == cc { isCur = 1 } } }
-        if isCur == 1 {
+        if isCur == 1 && cursorOn == 1 {
           if len(run) > 0 { appendRunTo(acc, run, fg, bg, font)  run = "" }
           // bar cursor only over a blank cell; over a real char (e.g. an
           // autosuggestion's first letter) keep the char so it stays visible.
@@ -925,7 +942,7 @@ func renderSnapshot(snap, deflt, font, cr, cc) {
   // vertical bar cursor (ghostty-style). If not already drawn in-loop (curStart>=0),
   // the cursor was at end-of-line and got trimmed out of gridRender — pad to its
   // column on its row, draw the bar.
-  if curStart < 0 {
+  if cursorOn == 1 { if curStart < 0 {
     if vrow == cr {
       if cc >= vcol {
       let pad = ""
@@ -935,8 +952,20 @@ func renderSnapshot(snap, deflt, font, cr, cc) {
       appendRunTo(acc, stemCursorGlyph(), cocoaGetAssocKey(appH(), "stem.cursorcolor"), bg, font)
       }
     }
-  }
+  } }
   emit acc
+}
+
+func stemRepaintCursor(state, pane, cols, rows, fg, cursorOn) {
+  let app = appH()
+  let views = cocoaGetAssocKey(app, "stem.pviews")
+  let docs = cocoaGetAssocKey(app, "stem.pdocs")
+  let cp = gridCursor(state, cols, rows)
+  let comma = indexOf(cp, ",")
+  msg_1(cocoaArrayGet(views, pane), "setAttributedString:", renderSnapshot(gridRender(state, cols, rows), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(cp, 0, comma)), toInt(substring(cp, comma + 1, len(cp))), cursorOn))
+  msg_1(cocoaArrayGet(docs, pane), "scrollToEndOfDocument:", 0)
+  msg_1(cocoaArrayGet(docs, pane), "setNeedsDisplay:", 1)
+  emit "1"
 }
 
 // ── menu handlers ───────────────────────────────────────────────────────
@@ -981,6 +1010,53 @@ func settingText(key) { emit cocoaGetText(cocoaGetAssocKey(appH(), "stem.setting
 func settingBool(key) {
   if cocoaState(cocoaGetAssocKey(appH(), "stem.setting." + key)) == 1 { emit "true" }
   emit "false"
+}
+func stemOpacityThousandths(value) {
+  let v = trim(value)
+  let dot = indexOf(v, ".")
+  if dot < 0 { emit toInt(v) * 1000 }
+  let whole = toInt(substring(v, 0, dot))
+  let frac = substring(v, dot + 1, len(v)) + "000"
+  emit whole * 1000 + toInt(substring(frac, 0, 3))
+}
+func stemSetOpacity(win, bg, value) {
+  let thousandths = stemOpacityThousandths(value)
+  if thousandths < 200 { thousandths = 200 }
+  if thousandths > 1000 { thousandths = 1000 }
+  // objc_msgSend_timer is the existing objk bridge that converts an integer
+  // millisecond value to a fractional double in d0. Objective-C ignores the
+  // unused trailing registers for NSColor.colorWithAlphaComponent:, giving us
+  // an exact 0.2–1.0 CGFloat without rounding through msg_d1. Keep the window
+  // Keep the window backing clear.  The terminal view receives transparentBg,
+  // while the frame and titlebar are painted separately as opaque black.
+  let transparentBg = msg_timer(bg, "colorWithAlphaComponent:", thousandths, 0, "", 0, 0)
+  msg_d1(win, "setAlphaValue:", 1)
+  msg_1(win, "setOpaque:", 0)
+  msg_1(win, "setBackgroundColor:", msg(cls("NSColor"), "clearColor"))
+  emit transparentBg
+}
+func stemBlackSurface(win, x, y, w, h, autoresize) {
+  let box = cocoaCustomView(win, cls("NSBox"), x, y, w, h)
+  msg_1(box, "setBoxType:", 4)
+  msg_1(box, "setBorderType:", 0)
+  msg_1(box, "setFillColor:", cocoaRGB(0, 0, 0))
+  cocoaSetAutoresizing(box, autoresize)
+  emit box
+}
+func stemPaintChrome(win, width, height, pad) {
+  // Four opaque strips form a deep-black frame without putting an opaque
+  // backing behind the translucent terminal canvas.
+  stemBlackSurface(win, 0, 0, width, pad, 2)                    // bottom: grow width
+  stemBlackSurface(win, 0, height - pad, width, pad, 10)       // top: grow width + follow top
+  stemBlackSurface(win, 0, pad, pad, height - pad * 2, 16)     // left: grow height
+  stemBlackSurface(win, width - pad, pad, pad, height - pad * 2, 17) // right: follow right + grow
+  // Native dark titlebars are gray. Paint the titlebar container itself black
+  // while leaving the traffic-light controls and title text above it.
+  let closeButton = msg_1(win, "standardWindowButton:", 0)
+  let titlebar = msg(closeButton, "superview")
+  msg_1(titlebar, "setWantsLayer:", 1)
+  msg_1(msg(titlebar, "layer"), "setBackgroundColor:", msg(cocoaRGB(0, 0, 0), "CGColor"))
+  emit "1"
 }
 func addSettingField(win, cfg, key, label, def, x, y, w) {
   cocoaPlainLabel(win, label, x, y + 3, 150, 22)
@@ -1085,16 +1161,20 @@ func onStemReload(self, cmd, sender) {
   stemApplyFont()
   let win = cocoaGetAssocKey(appH(), "stem.win")
   let fg = cfgRGBAlias(cfg, "foreground", "fg", 216, 218, 212)
-  let bg = cfgRGBAlias(cfg, "background", "bg", 5, 7, 12)
+  let bg = stemSetOpacity(win, cfgRGBAlias(cfg, "background", "bg", 5, 7, 12), cfgVal(cfg, "opacity", "0.80"))
   cocoaSetAssocKey(appH(), "stem.fgc", fg)
   cocoaSetAssocKey(appH(), "stem.bgc", bg)
   msg_1(win, "setTitle:", nsString(cfgVal(cfg, "title", "STEM")))
-  msg_1(win, "setBackgroundColor:", bg)
-  msg_d1(win, "setAlphaValue:", cfgVal(cfg, "opacity", "0.80"))
   let docs = cocoaGetAssocKey(appH(), "stem.pdocs")
+  let backs = cocoaGetAssocKey(appH(), "stem.pbacks")
   let dn = cocoaArrayCount(docs)
   let di = 0
-  while di < dn { cocoaSetBg(cocoaArrayGet(docs, di), bg)  cocoaSetTextColor(cocoaArrayGet(docs, di), fg)  di = di + 1 }
+  while di < dn {
+    cocoaSetBg(cocoaArrayGet(docs, di), bg)
+    cocoaSetTextColor(cocoaArrayGet(docs, di), fg)
+    msg_1(cocoaArrayGet(backs, di), "setFillColor:", bg)
+    di = di + 1
+  }
   emit "1"
 }
 func onStemAbout(self, cmd, sender) { exec("osascript -e 'display dialog \"stem " + fromCharCode(8212) + " a pure-Krypton terminal on the objk Objective-C FFI. No Obj-C source.\\n\\nkrypton-lang.org/programs/stem.html\" buttons {\"OK\"} default button \"OK\" with title \"About stem\"' >/dev/null 2>&1 &")  emit "1" }
@@ -1179,18 +1259,36 @@ func stemForkPty(pcols, prows, shell) {
 func stemMakePaneView(m, x, y, w, h, pcols, prows) {
   let app = appH()
   let win = cocoaGetAssocKey(app, "stem.win")
+  // A dedicated NSBox is the composited terminal surface. Unlike NSTextView
+  // and NSScrollView background drawing, NSBox reliably honors NSColor alpha.
+  let back = cocoaCustomView(win, cls("NSBox"), x, y, w, h)
+  msg_1(back, "setBoxType:", 4)
+  msg_1(back, "setBorderType:", 0)
+  msg_1(back, "setFillColor:", cocoaGetAssocKey(app, "stem.bgc"))
+  cocoaSetAutoresizing(back, 18)
   let view = cocoaScrollText(win, x, y, w, h)
-  msg_1(msg(view, "enclosingScrollView"), "setBorderType:", 0)
-  msg_1(msg(view, "enclosingScrollView"), "setHasVerticalScroller:", brainFlagS("stem.scrollbar", 1))
+  let scroll = msg(view, "enclosingScrollView")
+  msg_1(scroll, "setBorderType:", 0)
+  msg_1(scroll, "setHasVerticalScroller:", brainFlagS("stem.scrollbar", 1))
+  // NSScrollView and NSClipView otherwise paint their own opaque backgrounds,
+  // hiding the alpha supplied by the terminal NSTextView.
+  msg_1(scroll, "setDrawsBackground:", 0)
+  msg_1(msg(scroll, "contentView"), "setDrawsBackground:", 0)
   msg_1(view, "setEditable:", 0)
   msg_1(view, "setSelectable:", 0)
+  msg_1(view, "setDrawsBackground:", 0)
   cocoaSetFont(view, cocoaGetAssocKey(app, "stem.mono"))
   cocoaSetBg(view, cocoaGetAssocKey(app, "stem.bgc"))
   cocoaSetTextColor(view, cocoaGetAssocKey(app, "stem.fgc"))
   let kview = cocoaCustomView(win, stemKeyClass(), x, y, w, h)
+  // Single-pane terminal follows both dimensions of its window. Split layouts
+  // may replace these frames explicitly through retile().
+  cocoaSetAutoresizing(msg(view, "enclosingScrollView"), 18)
+  cocoaSetAutoresizing(kview, 18)
   cocoaSetAssocKey(kview, "ptyfd", cocoaNumber(m))
   cocoaSetAssocKey(kview, "paneidx", cocoaNumber(cocoaArrayCount(cocoaGetAssocKey(app, "stem.pkviews"))))
   cocoaArrayAdd(cocoaGetAssocKey(app, "stem.pmasters"), cocoaNumber(m))
+  cocoaArrayAdd(cocoaGetAssocKey(app, "stem.pbacks"), back)
   cocoaArrayAdd(cocoaGetAssocKey(app, "stem.pscrolls"), msg(view, "enclosingScrollView"))
   cocoaArrayAdd(cocoaGetAssocKey(app, "stem.pviews"), msg(view, "textStorage"))
   cocoaArrayAdd(cocoaGetAssocKey(app, "stem.pdocs"), view)
@@ -1213,6 +1311,7 @@ func setPane(idx, x, y, w, h) {
   if prows < 2 { prows = 2 }
   msg_frame(cocoaArrayGet(cocoaGetAssocKey(app, "stem.pscrolls"), idx), "setFrame:", x, y, w, h)
   msg_frame(cocoaArrayGet(cocoaGetAssocKey(app, "stem.pkviews"), idx), "setFrame:", x, y, w, h)
+  msg_frame(cocoaArrayGet(cocoaGetAssocKey(app, "stem.pbacks"), idx), "setFrame:", x, y, w, h)
   ptySetSize(cocoaNumberVal(cocoaArrayGet(cocoaGetAssocKey(app, "stem.pmasters"), idx)), prows, pcols)
   cocoaArraySet(cocoaGetAssocKey(app, "stem.pcols"), idx, cocoaNumber(pcols))
   cocoaArraySet(cocoaGetAssocKey(app, "stem.prows"), idx, cocoaNumber(prows))
@@ -1292,6 +1391,7 @@ func retile(axis) {
   let ln = cocoaArrayCount(leaves)
   let scrolls = cocoaGetAssocKey(app, "stem.pscrolls")
   let kviews = cocoaGetAssocKey(app, "stem.pkviews")
+  let backs = cocoaGetAssocKey(app, "stem.pbacks")
   let i = 0
   while i < 4 {
     let vis = 0
@@ -1301,6 +1401,7 @@ func retile(axis) {
     if vis == 1 { hid = 0 }
     msg_1(cocoaArrayGet(scrolls, i), "setHidden:", hid)
     msg_1(cocoaArrayGet(kviews, i), "setHidden:", hid)
+    msg_1(cocoaArrayGet(backs, i), "setHidden:", hid)
     i = i + 1
   }
   // repaint each visible pane's prompt at its new size (the grid was rebuilt)
@@ -1492,12 +1593,20 @@ just run {
   let fontFamily = cfgAlias(cfg, "font_family", "font", "JetBrainsMono Nerd Font Mono")
   let mono = cocoaFontFamily(cocoaMonoFont(toInt(cfgVal(cfg, "font_size", "13"))), fontFamily)
   let fg = cfgRGBAlias(cfg, "foreground", "fg", 216, 218, 212)
-  let bg = cfgRGBAlias(cfg, "background", "bg", 5, 7, 12)
+  let bg = stemSetOpacity(win, cfgRGBAlias(cfg, "background", "bg", 5, 7, 12), cfgVal(cfg, "opacity", "0.80"))
   cocoaSetAssocKey(app, "stem.mono", mono)
   cocoaSetAssocKey(app, "stem.fontsize", cocoaNumber(toInt(cfgVal(cfg, "font_size", "13"))))
   cocoaSetAssocKey(app, "stem.fontfam", nsString(fontFamily))
   cocoaSetAssocKey(app, "stem.fgc", fg)
   cocoaSetAssocKey(app, "stem.bgc", bg)
+  if cfgBool(cfg, "text_shadow", 1) == 1 {
+    let shadow = msg(msg(cls("NSShadow"), "alloc"), "init")
+    let shadowColor = msg_timer(cocoaRGB(0, 0, 0), "colorWithAlphaComponent:", 900, 0, "", 0, 0)
+    msg_1(shadow, "setShadowColor:", shadowColor)
+    msg_frame(shadow, "setShadowOffset:", 0, 0, 0, 0)
+    msg_timer(shadow, "setShadowBlurRadius:", toInt(cfgVal(cfg, "text_shadow_blur", "1")) * 1000, 0, "", 0, 0)
+    cocoaSetAssocKey(app, "stem.textshadow", shadow)
+  }
   cocoaSetAssocKey(app, "stem.cursorstyle", nsString(cfgVal(cfg, "cursor_style", "bar")))
   cocoaSetAssocKey(app, "stem.cursorcolor", cfgRGB(cfg, "cursor_color", 139, 92, 246))
   cocoaSetAssocKey(app, "stem.padding", cocoaNumber(toInt(cfgVal(cfg, "padding", "8"))))
@@ -1509,8 +1618,6 @@ just run {
   cocoaSetAssocKey(app, "stem.rows", cocoaNumber(rows))
   cocoaSetAssocKey(app, "stem.shell", nsString(shell))
   cocoaSetAssocKey(app, "stem.tree", mkLeaf(0))
-  msg_1(win, "setBackgroundColor:", bg)
-  msg_d1(win, "setAlphaValue:", cfgVal(cfg, "opacity", "0.80"))
   cocoaSetWindowMinSize(win, toInt(cfgVal(cfg, "minimum_width", "480")), toInt(cfgVal(cfg, "minimum_height", "280")))
   msg_1(win, "setTitlebarAppearsTransparent:", cfgBool(cfg, "titlebar_transparent", 1))
   msg_1(win, "setHasShadow:", cfgBool(cfg, "window_shadow", 1))
@@ -1520,6 +1627,7 @@ just run {
   if appearance == "dark" { msg_1(win, "setAppearance:", msg_1(cls("NSAppearance"), "appearanceNamed:", nsString("NSAppearanceNameDarkAqua"))) }
   if appearance == "light" { msg_1(win, "setAppearance:", msg_1(cls("NSAppearance"), "appearanceNamed:", nsString("NSAppearanceNameAqua"))) }
   cocoaSetAssocKey(app, "stem.pmasters", cocoaArray())
+  cocoaSetAssocKey(app, "stem.pbacks", cocoaArray())
   cocoaSetAssocKey(app, "stem.pscrolls", cocoaArray())
   cocoaSetAssocKey(app, "stem.pviews", cocoaArray())
   cocoaSetAssocKey(app, "stem.pdocs", cocoaArray())
@@ -1528,16 +1636,19 @@ just run {
   cocoaSetAssocKey(app, "stem.pkviews", cocoaArray())
   // all 4 panes created + warm; only pane 0 shown until split
   let pad = toInt(cfgVal(cfg, "padding", "8"))
+  stemPaintChrome(win, width, height, pad)
   let kview = stemMakePaneView(m0, pad, pad, width - pad * 2, height - pad * 2, cols, rows)
   let kv1 = stemMakePaneView(m1, pad, pad, width - pad * 2, height - pad * 2, cols, rows)
   let kv2 = stemMakePaneView(m2, pad, pad, width - pad * 2, height - pad * 2, cols, rows)
   let kv3 = stemMakePaneView(m3, pad, pad, width - pad * 2, height - pad * 2, cols, rows)
   let pscrolls = cocoaGetAssocKey(app, "stem.pscrolls")
   let pkviews = cocoaGetAssocKey(app, "stem.pkviews")
+  let pbacks = cocoaGetAssocKey(app, "stem.pbacks")
   let hi = 1
   while hi < 4 {
     msg_1(cocoaArrayGet(pscrolls, hi), "setHidden:", 1)
     msg_1(cocoaArrayGet(pkviews, hi), "setHidden:", 1)
+    msg_1(cocoaArrayGet(pbacks, hi), "setHidden:", 1)
     hi = hi + 1
   }
   cocoaSetAssocKey(app, "stem.master", cocoaNumber(m0))
@@ -1564,6 +1675,11 @@ just run {
   let p1init = 0
   let p2init = 0
   let p3init = 0
+  let cursorBlinkMs = toInt(cfgVal(cfg, "cursor_blink_ms", "530"))
+  let cursorBlinkTicks = cursorBlinkMs / 8
+  if cursorBlinkTicks < 1 { cursorBlinkTicks = 1 }
+  let cursorOn = 1
+  let lastCursorOn = 1
   let i = 0
   while i < 2000000000 {
     cocoaPumpEvents(app)
@@ -1584,6 +1700,10 @@ just run {
     let pcolsA = cocoaGetAssocKey(app, "stem.pcols")
     let prowsA = cocoaGetAssocKey(app, "stem.prows")
     let pc = cocoaArrayCount(masters)
+    cursorOn = 1
+    if cursorBlinkMs > 0 {
+      if (i / cursorBlinkTicks) - ((i / cursorBlinkTicks) / 2) * 2 == 1 { cursorOn = 0 }
+    }
     // re-assert activation once the event pump is running (first call before the
     // pump may not take) so the window becomes key + the text view draws.
     if i == 5 {
@@ -1607,7 +1727,7 @@ just run {
       let ci2 = indexOf(curp, ",")
       let rendered = gridRender(st0, c0, r0)
       cocoaSetAssocKey(app, "stem.lastrender", nsString(rendered))
-      msg_1(cocoaArrayGet(pviews, 0), "setAttributedString:", renderSnapshot(rendered, fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp, 0, ci2)), toInt(substring(curp, ci2 + 1, len(curp)))))
+      msg_1(cocoaArrayGet(pviews, 0), "setAttributedString:", renderSnapshot(rendered, fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp, 0, ci2)), toInt(substring(curp, ci2 + 1, len(curp))), cursorOn))
       msg_1(cocoaArrayGet(pdocs, 0), "scrollToEndOfDocument:", 0)
     }
     // On a COLD first launch the login shell + p10k can take >5s to draw the
@@ -1618,7 +1738,7 @@ just run {
     if i < 3000 { if i - (i / 30) * 30 == 0 {
       let cp = gridCursor(st0, c0, r0)
       let ck = indexOf(cp, ",")
-      msg_1(cocoaArrayGet(pviews, 0), "setAttributedString:", renderSnapshot(gridRender(st0, c0, r0), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(cp, 0, ck)), toInt(substring(cp, ck + 1, len(cp)))))
+      msg_1(cocoaArrayGet(pviews, 0), "setAttributedString:", renderSnapshot(gridRender(st0, c0, r0), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(cp, 0, ck)), toInt(substring(cp, ck + 1, len(cp))), cursorOn))
       msg_1(cocoaArrayGet(pdocs, 0), "scrollToEndOfDocument:", 0)
       // force the deferred draw (what a dock re-focus does): mark dirty + display
       msg_1(cocoaArrayGet(pdocs, 0), "setNeedsDisplay:", 1)
@@ -1637,7 +1757,7 @@ just run {
         st1 = gridFeed(st1, substring(buf1, 0, safe1), c1, r1)
         let curp1 = gridCursor(st1, c1, r1)
         let cj = indexOf(curp1, ",")
-        msg_1(cocoaArrayGet(pviews, 1), "setAttributedString:", renderSnapshot(gridRender(st1, c1, r1), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp1, 0, cj)), toInt(substring(curp1, cj + 1, len(curp1)))))
+        msg_1(cocoaArrayGet(pviews, 1), "setAttributedString:", renderSnapshot(gridRender(st1, c1, r1), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp1, 0, cj)), toInt(substring(curp1, cj + 1, len(curp1))), cursorOn))
         msg_1(cocoaArrayGet(pdocs, 1), "scrollToEndOfDocument:", 0)
       }
     }
@@ -1653,7 +1773,7 @@ just run {
         st2 = gridFeed(st2, substring(buf2, 0, safe2), c2, r2)
         let curp2 = gridCursor(st2, c2, r2)
         let ck = indexOf(curp2, ",")
-        msg_1(cocoaArrayGet(pviews, 2), "setAttributedString:", renderSnapshot(gridRender(st2, c2, r2), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp2, 0, ck)), toInt(substring(curp2, ck + 1, len(curp2)))))
+        msg_1(cocoaArrayGet(pviews, 2), "setAttributedString:", renderSnapshot(gridRender(st2, c2, r2), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp2, 0, ck)), toInt(substring(curp2, ck + 1, len(curp2))), cursorOn))
         msg_1(cocoaArrayGet(pdocs, 2), "scrollToEndOfDocument:", 0)
       }
     }
@@ -1669,9 +1789,16 @@ just run {
         st3 = gridFeed(st3, substring(buf3, 0, safe3), c3, r3)
         let curp3 = gridCursor(st3, c3, r3)
         let cl = indexOf(curp3, ",")
-        msg_1(cocoaArrayGet(pviews, 3), "setAttributedString:", renderSnapshot(gridRender(st3, c3, r3), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp3, 0, cl)), toInt(substring(curp3, cl + 1, len(curp3)))))
+        msg_1(cocoaArrayGet(pviews, 3), "setAttributedString:", renderSnapshot(gridRender(st3, c3, r3), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp3, 0, cl)), toInt(substring(curp3, cl + 1, len(curp3))), cursorOn))
         msg_1(cocoaArrayGet(pdocs, 3), "scrollToEndOfDocument:", 0)
       }
+    }
+    if cursorOn != lastCursorOn {
+      stemRepaintCursor(st0, 0, c0, r0, fg, cursorOn)
+      if pc >= 2 { if p1init == 1 { stemRepaintCursor(st1, 1, cocoaNumberVal(cocoaArrayGet(pcolsA, 1)), cocoaNumberVal(cocoaArrayGet(prowsA, 1)), fg, cursorOn) } }
+      if pc >= 3 { if p2init == 1 { stemRepaintCursor(st2, 2, cocoaNumberVal(cocoaArrayGet(pcolsA, 2)), cocoaNumberVal(cocoaArrayGet(prowsA, 2)), fg, cursorOn) } }
+      if pc >= 4 { if p3init == 1 { stemRepaintCursor(st3, 3, cocoaNumberVal(cocoaArrayGet(pcolsA, 3)), cocoaNumberVal(cocoaArrayGet(prowsA, 3)), fg, cursorOn) } }
+      lastCursorOn = cursorOn
     }
     sleepUs(0, 8000)
     i = i + 1
