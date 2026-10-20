@@ -1500,7 +1500,7 @@ just run {
   // p10k hangs forever waiting for it -> blank prompt. Disable gitstatus +
   // instant-prompt so p10k draws immediately (loses only the git segment).
   let wrapper = environ("HOME") + "/.config/stem/launch.zsh"
-  writeFile(wrapper, "#!" + shell + "\nexport TERM=" + termName + "\nexport TERM_PROGRAM=stem\nexport COLORTERM=truecolor\ncd \"" + cwd + "\" 2>/dev/null || cd \"$HOME\"\nexec " + shell + " -l\n")
+  writeFile(wrapper, "#!" + shell + "\nexport TERM=" + termName + "\nexport TERM_PROGRAM=stem\nexport COLORTERM=truecolor\nexport HISTFILE=\"$HOME/.zsh_history\"\nexport HISTSIZE=100000\nexport SAVEHIST=100000\ncd \"" + cwd + "\" 2>/dev/null || cd \"$HOME\"\nexec " + shell + " -l -o APPEND_HISTORY -o INC_APPEND_HISTORY -o HIST_SAVE_BY_COPY\n")
   exec("/bin/chmod +x " + wrapper)
 
   // fork ALL 4 pane shells BEFORE cocoaInit + render them warm from frame 0
