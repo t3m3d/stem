@@ -1240,6 +1240,30 @@ func stemKeyClass() {
   }
   emit c
 }
+func onStemWindowResize(self, cmd, note) {
+  let app = appH()
+  let content = msg(cocoaGetAssocKey(app, "stem.win"), "contentView")
+  let w = msgRectWidth(content, "frame")
+  let h = msgRectHeight(content, "frame")
+  if w > 0 && h > 0 {
+    // NSWindow sends this synchronously during live resize. Move pane frames
+    // inside that event, before AppKit presents the next window frame.
+    retileFrames(w, h)
+    cocoaSetAssocKey(app, "stem.pendingw", cocoaNumber(w))
+    cocoaSetAssocKey(app, "stem.pendingh", cocoaNumber(h))
+    cocoaSetAssocKey(app, "stem.resizewait", cocoaNumber(0))
+  }
+  emit "1"
+}
+func stemWindowDelegateClass() {
+  let c = objc_lookUpClass("StemWindowDelegate")
+  if c == 0 {
+    c = cocoaClassNew("StemWindowDelegate")
+    cocoaClassAddMethod(c, "windowDidResize:", funcptr(onStemWindowResize), "v@:@")
+    cocoaClassRegister(c)
+  }
+  emit c
+}
 func stemForkPty(pcols, prows, shell) {
   let m = ptyMaster("/dev/ptmx")
   let slave = ptySlaveName(m)
@@ -1343,12 +1367,13 @@ func stemSyncWindowSize() {
     cocoaSetAssocKey(app, "stem.resizewait", cocoaNumber(0))
     emit 0
   }
-  // Keep split dividers locked to live window geometry. PTY rows/columns stay
-  // debounced below so shells do not receive a resize storm while dragging.
-  retileFrames(w, h)
   let pendingw = cocoaNumberVal(cocoaGetAssocKey(app, "stem.pendingw"))
   let pendingh = cocoaNumberVal(cocoaGetAssocKey(app, "stem.pendingh"))
   if w != pendingw || h != pendingh {
+    // Apply frames once per real geometry change. Reapplying identical frames
+    // during debounce repaints split-pane top edges and visibly flickers.
+    // PTY rows/columns stay debounced below to avoid resize storms.
+    retileFrames(w, h)
     cocoaSetAssocKey(app, "stem.pendingw", cocoaNumber(w))
     cocoaSetAssocKey(app, "stem.pendingh", cocoaNumber(h))
     cocoaSetAssocKey(app, "stem.resizewait", cocoaNumber(0))
@@ -1458,7 +1483,10 @@ func retile(axis) {
   let kviews = cocoaGetAssocKey(app, "stem.pkviews")
   let backs = cocoaGetAssocKey(app, "stem.pbacks")
   let splitMask = 18
-  if ln > 1 { splitMask = 0 }
+  // Split widths are laid out by Stem, but pane heights must follow AppKit's
+  // live resize synchronously. Without NSViewHeightSizable (16), the window
+  // grows before the timer callback and exposes a flickering strip at top.
+  if ln > 1 { splitMask = 16 }
   let i = 0
   while i < 4 {
     let vis = 0
@@ -1732,6 +1760,9 @@ just run {
   }
   cocoaSetAssocKey(app, "stem.master", cocoaNumber(m0))
   cocoaSetAssocKey(app, "stem.focus", kview)
+  let windowDelegate = cocoaNew(stemWindowDelegateClass())
+  cocoaSetAssocKey(app, "stem.windelegate", windowDelegate)
+  msg_1(win, "setDelegate:", windowDelegate)
   cocoaShow(win, app)
   if cfgBool(cfg, "start_fullscreen", 0) == 1 { msg_1(win, "toggleFullScreen:", 0) }
   cocoaMakeFirstResponder(win, kview)
@@ -1791,7 +1822,7 @@ just run {
     }
     // AppKit autoresizes the views immediately; keep the PTY and terminal grid
     // in lockstep. Polling every four ticks avoids resize-drag churn.
-    if (i / 4) * 4 == i { stemSyncWindowSize() }
+    stemSyncWindowSize()
     if brainFlagS("stem.splitdirty", 0) == 1 {
       cocoaSetAssocKey(app, "stem.splitdirty", cocoaNumber(0))
       st0 = gridNew(cocoaNumberVal(cocoaArrayGet(pcolsA, 0)), cocoaNumberVal(cocoaArrayGet(prowsA, 0)))  pend0 = ""
