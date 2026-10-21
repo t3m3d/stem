@@ -80,10 +80,11 @@ See `windows/README.md` for the migration boundary and shell override.
 ## Shipping (cask DMG)
 
 ```bash
-kcc -r build_dmg.ks <version>          # → dist/stem-<version>.dmg
+kcc -r build_dmg.ks                    # VERSION → dist/stem-<version>.dmg
 ```
 
-`build_dmg.ks` builds `stem.app` with the released `kcc` (objk, no Obj-C),
+`build_dmg.ks` reads the release number from `VERSION`, builds `stem.app` with
+the released `kcc` (objk, no Obj-C),
 **fails closed** if the app isn't C-free, then makes the compressed DMG the cask
 ships. With Homebrew `krypton` >= 2.4.0 on PATH it needs no config; otherwise
 point `KRYPTON_ROOT` at a krypton 2.4.0 install. It prints the sha256 + the

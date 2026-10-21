@@ -2,7 +2,7 @@
 // RELEASED Krypton kcc. No dev checkout, no Obj-C: stem.ks builds C-free on the
 // objk FFI that shipped in Krypton 2.4.0.
 //
-// Usage:  kcc -r build_dmg.ks <version>          # e.g. 0.12.11
+// Usage:  kcc -r build_dmg.ks [version]          # defaults to VERSION
 //
 // Toolchain: uses `kcc` on PATH. Once Homebrew `krypton` is >= 2.4.0 its wrapper
 // sets KRYPTON_ROOT to a libexec that carries objk, so no extra config is needed.
@@ -12,11 +12,14 @@
 func sh(c) { emit trim(exec(c)) }
 
 just run {
-    if argCount() == 0 || arg("0") == "" {
-        kp("usage: kcc -r build_dmg.ks <version>   (e.g. 0.12.11)")
-        emit 1
+    let ver = trim(readFile("VERSION"))
+    if argCount() > 0 && arg("0") != "" {
+        if arg("0") != ver {
+            kp("build_dmg.ks: version " + arg("0") + " does not match VERSION " + ver)
+            emit 1
+        }
     }
-    let ver = arg("0")
+    if ver == "" { kp("build_dmg.ks: missing VERSION")  emit 1 }
 
     // 1. Build the pure-Krypton objk app with the (released) kcc. build_objk.ks
     //    honors KRYPTON_ROOT; pass ours through so the child kcc sees it.
@@ -44,8 +47,12 @@ just run {
     exec("mkdir -p dist")
     let out = "dist/stem-" + ver + ".dmg"
     exec("rm -f \"" + out + "\"")
-    let r = exec("hdiutil create -volname stem -srcfolder \"" + stage + "\" -ov -format UDZO \"" + out + "\" 2>&1")
-    if indexOf(r, "created:") < 0 { kp(r) }
+    let rc = shellRun("diskutil image create from --format UDZO --volumeName stem \"" + stage + "\" \"" + out + "\"")
+    if rc != "0" || sh("test -s \"" + out + "\" && echo yes") != "yes" {
+        kp("build_dmg.ks: disk image creation failed rc=" + rc)
+        exec("rm -rf \"" + stage + "\"")
+        exit("1")
+    }
     exec("rm -rf \"" + stage + "\"")
 
     kp("==> built " + out + " (" + sh("du -h \"" + out + "\" | cut -f1") + ")")

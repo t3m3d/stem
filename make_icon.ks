@@ -44,56 +44,14 @@ func buildIcns(folder, output) {
     appendIcnsChunk(output, "69633130", p1024)
 }
 
-func pixel(value, minimum) {
-    if value < minimum { emit minimum }
-    emit value
-}
-
 func renderIcon(folder, size, name) {
-    let pool = okAutoreleasePool()
-    let image = okImage(size)
-    okImageBegin(image)
-    okGraphicsSave()
-
-    let margin = pixel(size * 85 / 1000, 1)
-    let side = size - margin * 2
-    let radius = pixel(side * 225 / 1000, 1)
-    let panel = okRoundedPath(margin, margin, side, side, radius, radius)
-    let start = okRGBA(43, 46, 54, 255)
-    let finish = okRGBA(18, 20, 26, 255)
-    let gradient = okGradient(start, finish)
-    okGradientPath(gradient, panel, -90)
-    okColorSet(okRGBA(255, 255, 255, 18))
-    okPathWidth(panel, pixel(size * 4 / 1000, 1))
-    okPathStroke(panel)
-
-    let cx = size * 39 / 100
-    let cy = size / 2
-    let w = pixel(size * 125 / 1000, 1)
-    let h = pixel(size * 155 / 1000, 1)
-    let chevron = okPath()
-    okPathMove(chevron, cx - w, cy + h)
-    okPathLine(chevron, cx + w, cy)
-    okPathLine(chevron, cx - w, cy - h)
-    okPathWidth(chevron, pixel(size * 58 / 1000, 1))
-    okPathCap(chevron, 1)
-    okPathJoin(chevron, 1)
-    okColorSet(okRGBA(61, 212, 140, 255))
-    okPathStroke(chevron)
-
-    let cursorX = cx + w * 17 / 10
-    let cursor = okRoundedPath(cursorX, cy - h, pixel(size * 95 / 1000, 1), h * 2,
-                               pixel(size * 12 / 1000, 1), pixel(size * 12 / 1000, 1))
-    okColorSet(okRGBA(237, 237, 237, 242))
-    okPathFill(cursor)
-
-    okGraphicsRestore()
-    okImageEnd(image)
-    if okImagePNG(image, folder + "/" + name) == 0 {
-        kp("PNG write failed: " + name)
+    let source = "assets/stem-brain.png"
+    let output = folder + "/" + name
+    exec("sips -z " + toString(size) + " " + toString(size) + " \"" + source + "\" --out \"" + output + "\" >/dev/null")
+    if trim(exec("test -s \"" + output + "\" && echo yes")) != "yes" {
+        kp("PNG resize failed: " + name)
         exit("1")
     }
-    okDrainPool(pool)
 }
 
 just run {

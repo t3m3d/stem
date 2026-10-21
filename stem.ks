@@ -963,7 +963,6 @@ func stemRepaintCursor(state, pane, cols, rows, fg, cursorOn) {
   let cp = gridCursor(state, cols, rows)
   let comma = indexOf(cp, ",")
   msg_1(cocoaArrayGet(views, pane), "setAttributedString:", renderSnapshot(gridRender(state, cols, rows), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(cp, 0, comma)), toInt(substring(cp, comma + 1, len(cp))), cursorOn))
-  msg_1(cocoaArrayGet(docs, pane), "scrollToEndOfDocument:", 0)
   msg_1(cocoaArrayGet(docs, pane), "setNeedsDisplay:", 1)
   emit "1"
 }
@@ -1270,6 +1269,7 @@ func stemMakePaneView(m, x, y, w, h, pcols, prows) {
   let scroll = msg(view, "enclosingScrollView")
   msg_1(scroll, "setBorderType:", 0)
   msg_1(scroll, "setHasVerticalScroller:", brainFlagS("stem.scrollbar", 1))
+  msg_1(scroll, "setHasHorizontalScroller:", 0)
   // NSScrollView and NSClipView otherwise paint their own opaque backgrounds,
   // hiding the alpha supplied by the terminal NSTextView.
   msg_1(scroll, "setDrawsBackground:", 0)
@@ -1277,6 +1277,12 @@ func stemMakePaneView(m, x, y, w, h, pcols, prows) {
   msg_1(view, "setEditable:", 0)
   msg_1(view, "setSelectable:", 0)
   msg_1(view, "setDrawsBackground:", 0)
+  // PTY grid owns wrapping. NSTextView wrapping same rows again creates extra
+  // lines, activates scroller, and can wedge rendering after a wide resize.
+  msg_1(view, "setHorizontallyResizable:", 1)
+  let container = msg(view, "textContainer")
+  msg_1(container, "setWidthTracksTextView:", 0)
+  msg_d2(container, "setContainerSize:", 1000000, 1000000)
   cocoaSetFont(view, cocoaGetAssocKey(app, "stem.mono"))
   cocoaSetBg(view, cocoaGetAssocKey(app, "stem.bgc"))
   cocoaSetTextColor(view, cocoaGetAssocKey(app, "stem.fgc"))
@@ -1299,23 +1305,62 @@ func stemMakePaneView(m, x, y, w, h, pcols, prows) {
 }
 func paneCount() { emit cocoaArrayCount(treeLeaves()) }
 // set pane idx's frame + pty size + stored cols/rows
-func setPane(idx, x, y, w, h) {
+func setPaneFrame(idx, x, y, w, h) {
   let app = appH()
-  let W = cocoaNumberVal(cocoaGetAssocKey(app, "stem.w"))
-  let H = cocoaNumberVal(cocoaGetAssocKey(app, "stem.h"))
-  let C = cocoaNumberVal(cocoaGetAssocKey(app, "stem.cols"))
-  let R = cocoaNumberVal(cocoaGetAssocKey(app, "stem.rows"))
-  let pcols = (C * w) / W
-  let prows = (R * h) / H
-  if pcols < 4 { pcols = 4 }
-  if prows < 2 { prows = 2 }
   msg_frame(cocoaArrayGet(cocoaGetAssocKey(app, "stem.pscrolls"), idx), "setFrame:", x, y, w, h)
   msg_frame(cocoaArrayGet(cocoaGetAssocKey(app, "stem.pkviews"), idx), "setFrame:", x, y, w, h)
   msg_frame(cocoaArrayGet(cocoaGetAssocKey(app, "stem.pbacks"), idx), "setFrame:", x, y, w, h)
+  emit "1"
+}
+func setPane(idx, x, y, w, h) {
+  let app = appH()
+  let cellw = cocoaNumberVal(cocoaGetAssocKey(app, "stem.cellw1000"))
+  let cellh = cocoaNumberVal(cocoaGetAssocKey(app, "stem.cellh1000"))
+  let pcols = (w * 1000) / cellw
+  let prows = (h * 1000) / cellh
+  if pcols < 4 { pcols = 4 }
+  if prows < 2 { prows = 2 }
+  setPaneFrame(idx, x, y, w, h)
   ptySetSize(cocoaNumberVal(cocoaArrayGet(cocoaGetAssocKey(app, "stem.pmasters"), idx)), prows, pcols)
   cocoaArraySet(cocoaGetAssocKey(app, "stem.pcols"), idx, cocoaNumber(pcols))
   cocoaArraySet(cocoaGetAssocKey(app, "stem.prows"), idx, cocoaNumber(prows))
   emit "1"
+}
+
+// Track the real AppKit content rectangle. When the user resizes the window,
+// retile panes and send each PTY its new character geometry.
+func stemSyncWindowSize() {
+  let app = appH()
+  let content = msg(cocoaGetAssocKey(app, "stem.win"), "contentView")
+  let w = msgRectWidth(content, "frame")
+  let h = msgRectHeight(content, "frame")
+  if w < 1 || h < 1 { emit 0 }
+  let oldw = cocoaNumberVal(cocoaGetAssocKey(app, "stem.w"))
+  let oldh = cocoaNumberVal(cocoaGetAssocKey(app, "stem.h"))
+  if w == oldw && h == oldh {
+    cocoaSetAssocKey(app, "stem.pendingw", cocoaNumber(w))
+    cocoaSetAssocKey(app, "stem.pendingh", cocoaNumber(h))
+    cocoaSetAssocKey(app, "stem.resizewait", cocoaNumber(0))
+    emit 0
+  }
+  // Keep split dividers locked to live window geometry. PTY rows/columns stay
+  // debounced below so shells do not receive a resize storm while dragging.
+  retileFrames(w, h)
+  let pendingw = cocoaNumberVal(cocoaGetAssocKey(app, "stem.pendingw"))
+  let pendingh = cocoaNumberVal(cocoaGetAssocKey(app, "stem.pendingh"))
+  if w != pendingw || h != pendingh {
+    cocoaSetAssocKey(app, "stem.pendingw", cocoaNumber(w))
+    cocoaSetAssocKey(app, "stem.pendingh", cocoaNumber(h))
+    cocoaSetAssocKey(app, "stem.resizewait", cocoaNumber(0))
+    emit 0
+  }
+  let wait = cocoaNumberVal(cocoaGetAssocKey(app, "stem.resizewait")) + 1
+  cocoaSetAssocKey(app, "stem.resizewait", cocoaNumber(wait))
+  if wait < 6 { emit 0 }
+  cocoaSetAssocKey(app, "stem.w", cocoaNumber(w))
+  cocoaSetAssocKey(app, "stem.h", cocoaNumber(h))
+  retile(0)
+  emit 1
 }
 // ── split tree ──────────────────────────────────────────────────────────
 // node = NSArray. leaf: [0, paneIdx]. split: [1, axis, childA, childB]
@@ -1340,6 +1385,26 @@ func layoutTree(n, x, y, w, h) {
     layoutTree(splitA(n), x, y + half + gap, w, h - half - gap)
     layoutTree(splitB(n), x, y, w, half)
   }
+  emit "1"
+}
+func layoutFrameTree(n, x, y, w, h) {
+  if nodeType(n) == 0 { setPaneFrame(leafIdx(n), x, y, w, h)  emit "1" }
+  let gap = brainFlagS("stem.panegap", 2)
+  if splitAxis(n) == 1 {
+    let half = (w - gap) / 2
+    layoutFrameTree(splitA(n), x, y, half, h)
+    layoutFrameTree(splitB(n), x + half + gap, y, w - half - gap, h)
+  }
+  else {
+    let half = (h - gap) / 2
+    layoutFrameTree(splitA(n), x, y + half + gap, w, h - half - gap)
+    layoutFrameTree(splitB(n), x, y, w, half)
+  }
+  emit "1"
+}
+func retileFrames(W, H) {
+  let pad = brainFlagS("stem.padding", 0)
+  layoutFrameTree(cocoaGetAssocKey(appH(), "stem.tree"), pad, pad, W - pad * 2, H - pad * 2)
   emit "1"
 }
 func splitTree(n, target, axis, newIdx, before) {
@@ -1392,6 +1457,8 @@ func retile(axis) {
   let scrolls = cocoaGetAssocKey(app, "stem.pscrolls")
   let kviews = cocoaGetAssocKey(app, "stem.pkviews")
   let backs = cocoaGetAssocKey(app, "stem.pbacks")
+  let splitMask = 18
+  if ln > 1 { splitMask = 0 }
   let i = 0
   while i < 4 {
     let vis = 0
@@ -1402,6 +1469,9 @@ func retile(axis) {
     msg_1(cocoaArrayGet(scrolls, i), "setHidden:", hid)
     msg_1(cocoaArrayGet(kviews, i), "setHidden:", hid)
     msg_1(cocoaArrayGet(backs, i), "setHidden:", hid)
+    cocoaSetAutoresizing(cocoaArrayGet(scrolls, i), splitMask)
+    cocoaSetAutoresizing(cocoaArrayGet(kviews, i), splitMask)
+    cocoaSetAutoresizing(cocoaArrayGet(backs, i), splitMask)
     i = i + 1
   }
   // repaint each visible pane's prompt at its new size (the grid was rebuilt)
@@ -1463,7 +1533,7 @@ func defaultConfig() {
     let bundled = readFile(msg(resources, "UTF8String") + "/stem.conf")
     if len(bundled) > 0 { emit bundled }
   }
-  emit "# STEM configuration\ntitle = STEM\nshell = /bin/zsh\nworking_directory = ~\nterm = xterm-256color\nfont_family = JetBrainsMono Nerd Font Mono\nfont_size = 13\ncols = 100\nrows = 30\nwidth = 1000\nheight = 650\npadding = 8\npane_gap = 2\nopacity = 1.0\nappearance = dark\nscrollbar = true\ncursor_style = bar\ncursor_color = #8B5CF6\nforeground = #D8DAD4\nbackground = #05070C\n"
+  emit "# STEM configuration\ntitle = STEM\nshell = /bin/zsh\nworking_directory = ~\nterm = xterm-256color\nfont_family = JetBrainsMono Nerd Font Mono\nfont_size = 13\ncols = 108\nrows = 30\nwidth = 1000\nheight = 650\npadding = 8\npane_gap = 2\nopacity = 1.0\nappearance = dark\nscrollbar = true\ncursor_style = bar\ncursor_color = #8B5CF6\nforeground = #D8DAD4\nbackground = #05070C\n"
 }
 
 just run {
@@ -1482,7 +1552,11 @@ just run {
     writeFile(cfgPath, cfg)
   }
 
-  let cols  = toInt(cfgVal(cfg, "cols", "92"))
+  let cols  = toInt(cfgVal(cfg, "cols", "108"))
+  // KryoFetch's two-column macOS report needs 104–107 cells. Older Stem
+  // configs used 100 despite the default window having room, wrapping the
+  // trailing percentage onto a second line. Preserve larger user choices.
+  if cols < 108 { cols = 108 }
   let rows  = toInt(cfgVal(cfg, "rows", "28"))
   let width = toInt(cfgVal(cfg, "width", "760"))
   let height = toInt(cfgVal(cfg, "height", "500"))
@@ -1616,6 +1690,11 @@ just run {
   cocoaSetAssocKey(app, "stem.h", cocoaNumber(height))
   cocoaSetAssocKey(app, "stem.cols", cocoaNumber(cols))
   cocoaSetAssocKey(app, "stem.rows", cocoaNumber(rows))
+  cocoaSetAssocKey(app, "stem.pendingw", cocoaNumber(width))
+  cocoaSetAssocKey(app, "stem.pendingh", cocoaNumber(height))
+  cocoaSetAssocKey(app, "stem.resizewait", cocoaNumber(0))
+  cocoaSetAssocKey(app, "stem.cellw1000", cocoaNumber(((width - toInt(cfgVal(cfg, "padding", "8")) * 2) * 1000) / cols))
+  cocoaSetAssocKey(app, "stem.cellh1000", cocoaNumber(((height - toInt(cfgVal(cfg, "padding", "8")) * 2) * 1000) / rows))
   cocoaSetAssocKey(app, "stem.shell", nsString(shell))
   cocoaSetAssocKey(app, "stem.tree", mkLeaf(0))
   cocoaSetWindowMinSize(win, toInt(cfgVal(cfg, "minimum_width", "480")), toInt(cfgVal(cfg, "minimum_height", "280")))
@@ -1710,6 +1789,9 @@ just run {
       msg_1(app, "activateIgnoringOtherApps:", 1)
       msg_1(cocoaGetAssocKey(app, "stem.win"), "makeKeyAndOrderFront:", 0)
     }
+    // AppKit autoresizes the views immediately; keep the PTY and terminal grid
+    // in lockstep. Polling every four ticks avoids resize-drag churn.
+    if (i / 4) * 4 == i { stemSyncWindowSize() }
     if brainFlagS("stem.splitdirty", 0) == 1 {
       cocoaSetAssocKey(app, "stem.splitdirty", cocoaNumber(0))
       st0 = gridNew(cocoaNumberVal(cocoaArrayGet(pcolsA, 0)), cocoaNumberVal(cocoaArrayGet(prowsA, 0)))  pend0 = ""
@@ -1728,7 +1810,6 @@ just run {
       let rendered = gridRender(st0, c0, r0)
       cocoaSetAssocKey(app, "stem.lastrender", nsString(rendered))
       msg_1(cocoaArrayGet(pviews, 0), "setAttributedString:", renderSnapshot(rendered, fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp, 0, ci2)), toInt(substring(curp, ci2 + 1, len(curp))), cursorOn))
-      msg_1(cocoaArrayGet(pdocs, 0), "scrollToEndOfDocument:", 0)
     }
     // On a COLD first launch the login shell + p10k can take >5s to draw the
     // prompt; an idle prompt then sends no output to trigger a view repaint, so
@@ -1739,7 +1820,6 @@ just run {
       let cp = gridCursor(st0, c0, r0)
       let ck = indexOf(cp, ",")
       msg_1(cocoaArrayGet(pviews, 0), "setAttributedString:", renderSnapshot(gridRender(st0, c0, r0), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(cp, 0, ck)), toInt(substring(cp, ck + 1, len(cp))), cursorOn))
-      msg_1(cocoaArrayGet(pdocs, 0), "scrollToEndOfDocument:", 0)
       // force the deferred draw (what a dock re-focus does): mark dirty + display
       msg_1(cocoaArrayGet(pdocs, 0), "setNeedsDisplay:", 1)
       msg(cocoaArrayGet(pdocs, 0), "display")
@@ -1758,7 +1838,6 @@ just run {
         let curp1 = gridCursor(st1, c1, r1)
         let cj = indexOf(curp1, ",")
         msg_1(cocoaArrayGet(pviews, 1), "setAttributedString:", renderSnapshot(gridRender(st1, c1, r1), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp1, 0, cj)), toInt(substring(curp1, cj + 1, len(curp1))), cursorOn))
-        msg_1(cocoaArrayGet(pdocs, 1), "scrollToEndOfDocument:", 0)
       }
     }
     if pc >= 3 {
@@ -1774,7 +1853,6 @@ just run {
         let curp2 = gridCursor(st2, c2, r2)
         let ck = indexOf(curp2, ",")
         msg_1(cocoaArrayGet(pviews, 2), "setAttributedString:", renderSnapshot(gridRender(st2, c2, r2), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp2, 0, ck)), toInt(substring(curp2, ck + 1, len(curp2))), cursorOn))
-        msg_1(cocoaArrayGet(pdocs, 2), "scrollToEndOfDocument:", 0)
       }
     }
     if pc >= 4 {
@@ -1790,7 +1868,6 @@ just run {
         let curp3 = gridCursor(st3, c3, r3)
         let cl = indexOf(curp3, ",")
         msg_1(cocoaArrayGet(pviews, 3), "setAttributedString:", renderSnapshot(gridRender(st3, c3, r3), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp3, 0, cl)), toInt(substring(curp3, cl + 1, len(curp3))), cursorOn))
-        msg_1(cocoaArrayGet(pdocs, 3), "scrollToEndOfDocument:", 0)
       }
     }
     if cursorOn != lastCursorOn {

@@ -14,6 +14,8 @@ func isFile(p) { emit trim(exec("test -f \"" + p + "\" && echo yes || echo no"))
 func newer(a, b) { emit trim(exec("test \"" + a + "\" -nt \"" + b + "\" && echo yes || echo no")) }
 
 just run {
+    let version = trim(readFile("VERSION"))
+    if version == "" { version = "0.1.0" }
     let root = environ("KRYPTON_ROOT")
     if root == "" { root = "../krypton" }
     let fe   = root + "/compiler/macos_arm64/kcc-arm64"
@@ -50,7 +52,9 @@ just run {
     exec("mkdir -p \"" + app + "/Contents/MacOS\" \"" + app + "/Contents/Resources\"")
     exec("cp /tmp/stem.bin \"" + app + "/Contents/MacOS/stem\"")
     exec("chmod +x \"" + app + "/Contents/MacOS/stem\"")
-    if isFile("stem.icns") == "yes" { exec("cp stem.icns \"" + app + "/Contents/Resources/stem.icns\"") }
+    // Keep resource name Finder-safe. Versioned name defeats stale icon cache.
+    let iconName = "stem-v0_1_0"
+    if isFile("stem.icns") == "yes" { exec("cp stem.icns \"" + app + "/Contents/Resources/" + iconName + ".icns\"") }
     if isFile("stem.conf") == "yes" { exec("cp stem.conf \"" + app + "/Contents/Resources/stem.conf\"") }
 
     let q = fromCharCode(34)
@@ -61,9 +65,10 @@ just run {
         "  <key>CFBundleDisplayName</key><string>stem</string>\n" +
         "  <key>CFBundleExecutable</key><string>stem</string>\n" +
         "  <key>CFBundleIdentifier</key><string>org.krypton-lang.stem</string>\n" +
-        "  <key>CFBundleIconFile</key><string>stem</string>\n" +
+        "  <key>CFBundleIconFile</key><string>" + iconName + ".icns</string>\n" +
         "  <key>CFBundlePackageType</key><string>APPL</string>\n" +
-        "  <key>CFBundleShortVersionString</key><string>2.0.0</string>\n" +
+        "  <key>CFBundleShortVersionString</key><string>" + version + "</string>\n" +
+        "  <key>CFBundleVersion</key><string>" + version + "</string>\n" +
         "  <key>LSMinimumSystemVersion</key><string>11.0</string>\n" +
         "  <key>NSHighResolutionCapable</key><true/>\n" +
         "  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>\n" +
